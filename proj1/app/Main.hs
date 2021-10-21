@@ -43,4 +43,4 @@ main = do
   let expr = Add (Var "x") (Number 2)
   print $ runReaderT (eval expr) []
   print $ runReaderT (eval expr) [("x", 2)]
-  print $ runReader (eval $ Div (Var "x") (Number 0)) [("x", 2)]
+  print $ runReaderT (eval $ Div (Var "x") (Number 0)) [("x", 2)]
