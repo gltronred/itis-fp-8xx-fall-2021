@@ -68,7 +68,7 @@ fillQueue q b = do
     atomically $ writeTBQueue q i
   atomically $ writeTVar b True
 
-main = do
+main2 = do
   threads <- getNumCapabilities
   print threads
   (q,b) <- atomically $ (,)
@@ -80,3 +80,43 @@ main = do
     wait r
     forM_ results print
     print $ sum results
+
+-- Повторяем n раз действие,
+-- пока возвращается Nothing
+-- Если вернулся Just, возвращаем его
+retryN :: Int -> STM (Maybe a) -> STM (Maybe a)
+retryN 0 act = pure Nothing
+retryN n act = do
+  mr <- act
+  case mr of
+    Nothing -> retryN (n-1) act
+    Just r -> pure $ Just r
+
+count :: TQueue Int -> Async () -> Int -> IO Int
+count q r s = do
+  (finished, mx) <- atomically $ (,)
+    <$> pollSTM r
+    <*> tryReadTQueue q
+  case mx of
+    Nothing -> do
+      -- finished <- poll r
+      case finished of
+        Nothing -> count q r s
+        Just _ -> pure s
+    Just x -> count q r $! s+x
+
+writer :: TQueue Int -> IO ()
+writer q = do
+  forM_ [1..1000000] $ \i ->
+    atomically $ writeTQueue q i
+
+main = do
+  threads <- getNumCapabilities
+  print threads
+  q <- atomically newTQueue
+  withAsync (writer q) $ \r -> do
+    sums <- replicateConcurrently threads $
+      count q r 0
+    wait r
+    print sums
+    print $ sum sums
