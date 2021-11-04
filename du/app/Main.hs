@@ -100,17 +100,6 @@ tryReadDir dir = do
     Right fs -> return $ addPrevDir dir fs
 
 
-getAllDirs :: FilePath -> Int -> IO [FilePath]
-getAllDirs dir depth = do
-  dirs <- tryReadDir dir
-  if depth /= 0 && length dirs /= 0
-  then do
-    ds <- sumM1 $ map (\x -> getAllDirs x (depth - 1)) dirs
-    return $ dirs ++ ds
-  else do
-    return dirs
-
-
 sumM :: Num a => [IO a] -> IO a
 sumM xs = foldr (\m1 m2 -> do {a <- m1; b <- m2; return $ a + b})  (return 0) xs
 
