@@ -106,9 +106,5 @@ sumM xs = foldr (\m1 m2 -> do {a <- m1; b <- m2; return $ a + b})  (return 0) xs
 
 addPrevDir :: FilePath -> [FilePath] -> [FilePath]
 addPrevDir dir xs = map (\x -> dir ++ "/" ++ x) xs
-  
-  
-
-sumM1 xs = foldr (\m1 m2 -> do {a <- m1; b <- m2; return $ a ++ b})  (return []) xs
 
 
