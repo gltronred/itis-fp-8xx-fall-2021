@@ -6,6 +6,34 @@ import Control.Exception.Base ( SomeException, try )
 
 data FileTree a = File a | Folder FilePath Int a [FileTree a] deriving (Show)
 
+tryGetFileSize :: FilePath -> IO Integer
+tryGetFileSize path = do
+    sizeE <- try (getFileSize path) :: IO (Either SomeException Integer)
+    case sizeE of
+        Left exception -> 
+            ( do
+                putStrLn $ "Exception: " ++ show exception
+                return 0
+            )
+        Right size -> 
+            ( do
+                return size
+            )
+
+tryListDirectory :: FilePath -> IO [FilePath]
+tryListDirectory path = do
+    pathsE <- try (listDirectory path) :: IO (Either SomeException [FilePath])
+    case pathsE of
+        Left exception -> 
+            ( do
+                putStrLn $ "Exception: " ++ show exception
+                return []
+            )
+        Right paths -> 
+            ( do
+                return paths
+            )
+
 formFileTree :: Int -> FilePath -> IO (FileTree Integer)
 formFileTree 0 path = do
     flag <- doesDirectoryExist path
@@ -13,25 +41,16 @@ formFileTree 0 path = do
         then do
             return $ File 0
         else do    
-            fileSize <- getFileSize path
+            fileSize <- tryGetFileSize path
             return $ File fileSize
 
 formFileTree depth path = do
     flag <- doesDirectoryExist path
     if flag
         then do
-            paths <- try (listDirectory path) :: IO (Either SomeException [FilePath])
-            case paths of
-                Left exception -> 
-                    ( do
-                        putStrLn $ "Exception: " ++ show exception
-                        return $ Folder path 0 0 []
-                    )
-                Right paths -> 
-                    ( do
-                        files <- mapM (formFileTree (depth - 1) . ((path ++ "\\") ++)) paths
-                        return $ Folder path (length files) (foldl sumSize 0 files) files
-                    )
+            paths <- tryListDirectory path
+            files <- mapM (formFileTree (depth - 1) . ((path ++ "\\") ++)) paths
+            return $ Folder path (length files) (foldl sumSize 0 files) files
         else do
             fileSize <- getFileSize path
             return $ File fileSize
