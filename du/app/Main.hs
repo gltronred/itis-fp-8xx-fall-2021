@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleContexts #-}
-
 module Main where
 
 import System.Environment
@@ -68,5 +66,11 @@ du :: FilePath -> Maybe Int -> IO ()
 du path Nothing = du' path (maxBound :: Int)
 du path (Just depth) = du' path depth
 
-main = du "." (Just 2)
-	
+main = do
+    args <- getArgs
+    putStrLn $ show $ args
+    if length args == 1 
+    then do
+      du (args !! 0) Nothing
+    else do
+      du (args !! 0) (Just (read (args !! 1)))
