@@ -40,23 +40,23 @@ domainParser :: Parser Domain
 domainParser = do
   _ <- string "//"
   mcreds <- optional $ try $ do
-    user <- some alphaNumChar
+    user <- some alphaNumChar <?> "username"
     _ <- single ':'
-    pass <- some alphaNumChar
+    pass <- some alphaNumChar <?> "password"
     _ <- single '@'
     pure (user, pass)
-  host <- some (alphaNumChar <|> single '.')
+  host <- some (alphaNumChar <|> single '.') <?> "hostname"
   -- mport <- optional $ do
   --   _ <- single ':'
   --   read <$> some digitChar
   mport <- optional $
     single ':' *>
-    fmap read (some digitChar)
+    fmap read (some digitChar <?> "port")
   pure $ Domain mcreds host mport
 
 urlParser :: Parser URL
 urlParser = URL
-  <$> schemeParser
+  <$> (schemeParser <?> "valid scheme")
   <*> optional domainParser
   <*  optional (single '/')
   <*> takeRest
