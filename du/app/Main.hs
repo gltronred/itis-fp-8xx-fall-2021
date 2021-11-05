@@ -27,29 +27,16 @@ main = do
       putStrLn ""
 
 
-    
-
-
-getFiles :: [FilePath] -> IO [FilePath]
-getFiles xs = do
-  sz <- mapM getFileSize xs
-  return $ fst $ unzip $ filter (\(a,b) -> b /= 4096) (zip xs sz)
-
-getSumSizes :: [FilePath] -> IO Integer
-getSumSizes fs = do
-  sz <- mapM getFileSize fs
-  return $ foldr (+) 0 sz
-
-getFromDir :: Bool -> [FilePath] -> [Integer] -> IO ([FilePath],[Integer])
-getFromDir files xs sz | files == True  = return $ unzip $ filter (\(a,b) -> b /= 4096) (zip xs sz)
-                       | files == False = return $ unzip $ filter (\(a,b) -> b == 4096) (zip xs sz)
+getFromDir :: Bool -> [FilePath] -> IO [FilePath]
+getFromDir files xs | files == True  = filterM doesFileExist xs
+                    | files == False = filterM doesDirectoryExist xs
 
 getFilesDirsSizes :: [FilePath] -> IO ([FilePath],[FilePath],Integer)
 getFilesDirsSizes xs = do
-  sz <- mapM tryGetSize xs
-  (fs,fsz) <- getFromDir True xs sz
-  (ds,_) <- getFromDir False xs sz
-  return $ (fs, ds, foldr (+) 0 fsz)
+  fs <- getFromDir True xs
+  ds <- getFromDir False xs
+  sz <- mapM tryGetSize fs
+  return $ (fs, ds, foldr (+) 0 sz)
 
 tryGetSize :: FilePath -> IO Integer
 tryGetSize x = do
