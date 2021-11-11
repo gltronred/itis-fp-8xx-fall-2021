@@ -29,7 +29,6 @@ count q r s = do
     <*> tryReadTQueue q
   case mx of
     Nothing -> do
-      finished <- poll r
       case finished of
         Nothing -> count q r s
         Just _ -> pure s
