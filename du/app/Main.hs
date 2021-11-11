@@ -26,11 +26,14 @@ duFoldersAndFilesSizeExtractor currPath depth = do
   result <- runStateT (getDirectoriesFromCurrent currPath depth) []
   size <- forM (snd result) getFileSizeAsString
   count <- forM (snd result) getFilesCount
-  putStrLn "Count:"
-  forM_ count putStrLn
+  print "Count:"
+  print count
   putStrLn "Size:"
-  forM_ size putStrLn
-
+  print size
+  -- putStrLn "Count:"
+  -- forM_ count putStrLn
+  -- putStrLn "Size:"
+  -- forM_ size putStrLn
 
 getDirectoriesFromCurrent :: FilePath -> Int -> StateT [FilePath] IO ()
 getDirectoriesFromCurrent currPath 0 = do modify (currPath :)
