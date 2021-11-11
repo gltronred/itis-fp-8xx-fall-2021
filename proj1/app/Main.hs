@@ -1,76 +1,48 @@
-{-# LANGUAGE FlexibleContexts #-}
-
 module Main where
 
-import Control.Monad.Except
-import Control.Monad.State
-import Data.Maybe
+import Control.Concurrent
+import Control.Concurrent.Async
+import Control.Concurrent.STM
+import Control.Monad
 
-data Expr
-  = Add Expr Expr
-  | Sub Expr Expr
-  | Mul Expr Expr
-  | Div Expr Expr
-  | Number Int
-  | Var String
-  | Assign String Expr
-  deriving (Eq,Show,Read)
-
-type Env = [(String, Int)]
-
-myConst :: Monad m => Int -> m Int
-myConst x = pure x
-
-onError :: MonadError String m
-        => Bool -> String -> m ()
-onError b msg = if b
-                then throwError msg
-                else pure ()
-
-eval :: ( MonadError String m
-        , MonadState Env m )
-     => Expr -> m Int
-eval expr = case expr of
-  Add e1 e2 -> do
-    v1 <- eval e1
-    v2 <- eval e2
-    pure $ v1 + v2
-  Sub e1 e2 -> do
-    v1 <- eval e1
-    v2 <- eval e2
-    pure $ v1 - v2
-  Mul e1 e2 -> do
-    v1 <- eval e1
-    v2 <- eval e2
-    pure $ v1 * v2
-  Div e1 e2 -> do
-    v1 <- eval e1
-    v2 <- eval e2
-    onError (v2 == 0) "Division by 0"
-    pure $ v1 `div` v2
-  Number n -> myConst n
-  Var name -> do
-    env <- get
-    onError (isNothing $ lookup name env) $
-      "No variable " ++ name
-    let Just v = lookup name env
-    pure v
-  Assign name e1 -> do
-    v1 <- eval e1
-    modify $ \st -> (name,v1) : filter (\v -> fst v /= name) st
-    pure v1
-
-run :: Expr -> Env -> Either String (Int, Env)
-run expr env = runExcept $ runStateT ev env
-  where ev :: StateT Env (Except String) Int
-        ev = eval expr
-
-main :: IO ()
 main = do
-  let expr = Add (Var "x") (Number 2)
-  print $ run expr []
-  print $ run expr [("x", 2)]
-  print $ run (Div (Var "x") (Number 0)) [("x", 2)]
-  let assign = Assign "x" (Number 5)
-  print $ run (Add assign (Var "x")) [("x", 2)]
-  print $ run (Add (Var "x") assign) [("x", 2)]
+  print "enter value for N: "
+  input <- getLine
+  let value = (read input :: Int)
+  threads <- getNumCapabilities
+  print threads
+  qu <- atomically newTQueue
+  withAsync (printRes qu value) $ \res -> do
+    summa <- replicateConcurrently threads $
+      count qu r 0
+    wait r
+    print summa
+    print $ sum summa
+
+verifyPrime :: Int -> Int
+verifyPrime 1 = 0
+verifyPrime n
+  = if g n 2
+    then n
+    else 0
+  where g n k | k*k > n = True
+              | n `mod` k == 0 = False
+              | otherwise = g n (k+1)
+
+count :: TQueue Int -> Async () -> Int -> IO Int
+count qu r s = do
+  (finish, m) <- atomically $ (,)
+    <$> pollSTM r
+    <*> tryReadTQueue qu
+  case m of
+    Nothing -> do
+      case finish of
+        Nothing -> count qu r s
+        Just _ -> pure s
+    Just x -> count qu r $! s + verifyPrime x
+
+printQ :: TQueue Int -> Int -> IO ()
+printQ qu n = do
+  print ("Our N: " ++ (show n))
+  forM_ [1..n] $ \i ->
+    atomically $ writeTQueue qu i
