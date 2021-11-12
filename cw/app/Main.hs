@@ -81,6 +81,16 @@ initial = State 0 Nothing 0 0
 sol2 :: [Button] -> Integer
 sol2 = prev . foldl' processButton initial
 
+in2 :: [Button]
+in2 = [ Digit 1, Digit 2
+      , Operation Plus
+      , Digit 3
+      , MemPlus
+      , Operation Minus
+      , Digit 7
+      , Operation Equals
+      , MemRestore]
+
 ----------------------------------
 
 data Result = Result
@@ -110,5 +120,13 @@ sol3 :: [Result]
 sol3 = foldl' addResult initState
   where initState = []
 
+in3 = [ Result "A" "B" 3 0
+      , Result "B" "C" 0 3
+      , Result "C" "A" 1 1]
+
 main :: IO ()
-main = putStrLn "Hello, Haskell!"
+main = do
+  putStrLn "Hello, Haskell!"
+  print $ sol1 in1
+  print $ sol2 in2
+  print $ sol3 in3
