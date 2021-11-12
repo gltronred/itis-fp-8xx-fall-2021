@@ -6,7 +6,7 @@ import Control.Concurrent.STM
 import Control.Monad
 
 primeOrZero :: Int -> Int
-primeOrZero 1 = 1
+primeOrZero 1 = 0
 primeOrZero n
   = if go n 2
     then n
