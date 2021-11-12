@@ -28,6 +28,61 @@ sol1 = concatMap toResult .
 
 ----------------------------------
 
+data Op
+  = Plus -- сложение
+  | Minus -- вычитание
+  | Times -- умножение
+  | Equals -- "равно"
+  deriving (Eq,Show,Read)
+data Button
+  = Digit Int -- цифры от 0 до 9
+  | Negate -- поменять знак
+  | Operation Op -- операция
+  | Clear -- очистить текущий результат
+  | MemPlus -- добавить текущий результат в память
+  | MemRestore -- заменить текущий результат числом из памяти
+  | MemClear -- очистить
+  deriving (Eq,Show,Read)
+
+data State = State
+  { prev :: Integer
+  , oper :: Maybe Op
+  , screen :: Integer
+  , memory :: Integer
+  } deriving (Eq,Show,Read)
+
+apply :: Op -> Integer -> Integer -> Integer
+apply o x y = case o of
+  Plus -> x+y
+  Minus -> x-y
+  Times -> x*y
+  Equals -> y
+
+processButton :: State
+              -> Button
+              -> State
+processButton State{ prev=p, oper=mo, screen=s, memory=m } b = case b of
+  Digit d -> State p mo (10*s+fromIntegral d) m
+  Negate -> State p mo (-s) m
+  Clear -> State 0 Nothing 0 m
+  Operation Equals -> case mo of
+    Nothing -> State s Nothing 0 m
+    Just op -> State (apply op p s) Nothing 0 m
+  Operation op -> case mo of
+    Nothing -> State s (Just op) 0 m
+    Just o -> State (apply o p s) (Just op) 0 m
+  MemPlus -> State p mo s (s + m)
+  MemRestore -> State p mo m m
+  MemClear -> State p mo s 0
+
+initial :: State
+initial = State 0 Nothing 0 0
+
+sol2 :: [Button] -> Integer
+sol2 = prev . foldl' processButton initial
+
+----------------------------------
+
 data Result = Result
   { teamA :: String
   , teamB :: String
