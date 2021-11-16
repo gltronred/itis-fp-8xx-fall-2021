@@ -109,5 +109,27 @@ csvRes =
   , [ "r4\",\"\\c1", "r4\",\"c2", "r4\",\"c3"]
   ]
 
+csvPars :: Parser [[String]]
+csvPars = sepEndBy line (char '\n')
+
+
+line :: Parser [String]
+line = sepBy1 cell (char ',')
+
+
+cell :: Parser String
+cell = quo <|> nCell
+
+
+escKey:: Parser (Token String)
+escKey = char '\\' >> anySingle
+
+nCell :: Parser String
+nCell = many (escKey <|> noneOf ",\n")
+
+quo :: Parser String
+quo = char '"' *> many (escKey <|> noneOf "\"") <* char '"'
+
 main :: IO ()
-main = pure ()
+main = do
+  parseTest csvPars csv
