@@ -57,20 +57,20 @@ outTabS cols = S.mapM_ putStrLn .
 
 --------------------------------------
 
-data Lens s a = Lens
-  { getter :: s -> a
-  , setter :: a -> s -> s
-  }
+type Lens s a
+  = (a -> a) -- функция модификации поля
+  -> s       -- старый объект
+  -> (a, s)  -- старое значение поля и новый объект
 
 ix :: Int -> Lens [a] a
-ix k = Lens (get k) (set k)
-  where get 0 (x:_xs) = x
-        get k (_x:xs) = get (k-1) xs
-        set 0 y (_:xs) = y : xs
-        set k y (x:xs) = x : set (k-1) y xs
+ix k = go k
+  where go 0 mod (x:xs) = (x, mod x : xs)
+        go k mod (x:xs) = let
+          (b,t) = go (k-1) mod xs
+          in (b, x:t)
 
-ex1 = getter (ix 4) [1..10]
-ex2 = setter (ix 4) 101 [1..10]
+ex1 = (ix 4) id [1..10]
+ex2 = (ix 4) (const 101) [1..10]
 
 
 
