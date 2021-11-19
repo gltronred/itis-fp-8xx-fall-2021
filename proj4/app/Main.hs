@@ -64,14 +64,20 @@ outTabS cols = S.mapM_ putStrLn .
 -- type Lens s a = s -> (a, a -> s)
 -- type Lens f s a
 --   = (a -> f a) -> s -> f s
+type Lens f s t a b
+  = (a -> f b) -> s -> f t
+type Lens' f s a = Lens f s s a a
 
-ix :: Functor f => Int -> Lens f [a] a
+ix :: Functor f => Int -> Lens' f [a] a
 ix k = \mod list -> go mod k list
   where
     go mod 0 (x:xs)
       = (:xs) <$> mod x
     go mod k (x:xs)
       = (x:) <$> go mod (k-1) xs
+
+_1 :: Functor f => Lens f (a,b) (c,b) a c
+_1 f (a,b) = (\x -> (x,b)) <$> f a
 
 getter lens s = fst $
   lens (\x -> (x,x)) s
