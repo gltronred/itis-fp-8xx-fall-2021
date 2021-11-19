@@ -60,19 +60,18 @@ outTabS cols = S.mapM_ putStrLn .
 type Lens f s a
   = (a -> f a) -- функция модификации поля
   -> s         -- старый объект
-  -> (a, f s)  -- старое значение поля и новый объект
+  -> f s       -- новый объект
 
 ix :: Functor f => Int -> Lens f [a] a
 ix k = go k
   where
-    go 0 mod (x:xs) = (x, (:xs) <$> mod x)
-    go k mod (x:xs) = let
-      (b,t) = go (k-1) mod xs
-      in (b, (x:) <$> t)
+    go 0 f (x:xs) = (:xs) <$> f x
+    go k f (x:xs) = (x:) <$> go (k-1) f xs
 
 ex1 = (ix 4) Identity [1..10]
 ex2 = (ix 4) (const $ Identity 101) [1..10]
 ex3 = (ix 4) (\x -> [101..104]) [1..10]
+ex4 = (ix 4) (\x -> (x,x)) [1..10]
 
 
 
