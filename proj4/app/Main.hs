@@ -20,25 +20,40 @@ import qualified Streaming.Prelude as S
 sumAndTabulate :: Int -> [Int] -> IO Int
 sumAndTabulate cols list = error "Write me!"
 
+
 -- -- Свободная монада - на одном из следующих занятий
 -- data S f m r
 --   = Elem (f (S f m r)) -- "чистый" элемент e и данные дальше
 --   | Act (m (S f m r))  -- данные из действия (в монаде m)
 --   | Res r              -- результат r
 
--- stS :: Int -> Stream (Of Int) IO Int -> IO Int
-stS cols ints = S.mapM_ putStrLn $ tabS cols $ S.store S.sum ints
+stS :: Int
+    -> Stream (Of Int) IO Int
+    -> IO Int
+stS cols = fmap S.fst' .
+  S.sum .
+  S.mapM_ (liftIO . putStrLn) .
+  tabS 3 .
+  S.copy
 
 -- Получение стрима из нужных строк
-tabS :: Int -> Stream (Of Int) IO r -> Stream (Of String) IO r
+tabS :: Monad m
+     => Int
+     -> Stream (Of Int) m r
+     -> Stream (Of String) m r
 tabS cols ints = S.mapsM S.mconcat $
                  S.chunksOf cols $
                  S.map addTab ints
   where addTab x = show x ++ "\t"
 
 -- Вывод на экран
-outTabS :: Int -> Stream (Of Int) IO () -> IO ()
-outTabS cols = S.mapM_ putStrLn . tabS cols
+outTabS :: Int
+        -> Stream (Of Int) IO ()
+        -> IO ()
+outTabS cols = S.mapM_ putStrLn .
+               tabS cols
+
+--------------------------------------
 
 main :: IO ()
 main = putStrLn "Hello, Haskell!"
