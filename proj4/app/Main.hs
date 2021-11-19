@@ -1,8 +1,5 @@
 module Main where
 
-import Streaming as S
-import qualified Streaming.Prelude as S
-
 -- Вывести на экран список list
 -- в cols столбцов (например,
 -- после каждого числа вывести
@@ -17,28 +14,15 @@ import qualified Streaming.Prelude as S
 -- >    10
 -- >
 -- > 55
-sumAndTabulate :: Int -> [Int] -> IO Int
-sumAndTabulate cols list = error "Write me!"
+sumAndTabulate :: Int -> [Int] -> IO ()
+sumAndTabulate cols list = do
+       let (a,b) = iter cols list 1 0 ""
+       putStr b
+       print a
 
--- -- Свободная монада - на одном из следующих занятий
--- data S f m r
---   = Elem (f (S f m r)) -- "чистый" элемент e и данные дальше
---   | Act (m (S f m r))  -- данные из действия (в монаде m)
---   | Res r              -- результат r
+iter cols []     col sum str = if col == 1 then (sum, str) else (sum, str ++ "\n")
+iter cols (x:xs) col sum str | cols == col = iter cols xs 1       (sum+x) (str++(show x)++"\t\n")
+                             | otherwise   = iter cols xs (col+1) (sum+x) (str++(show x)++"\t" )
 
--- stS :: Int -> Stream (Of Int) IO Int -> IO Int
-stS cols ints = S.mapM_ putStrLn $ tabS cols $ S.store S.sum ints
-
--- Получение стрима из нужных строк
-tabS :: Int -> Stream (Of Int) IO r -> Stream (Of String) IO r
-tabS cols ints = S.mapsM S.mconcat $
-                 S.chunksOf cols $
-                 S.map addTab ints
-  where addTab x = show x ++ "\t"
-
--- Вывод на экран
-outTabS :: Int -> Stream (Of Int) IO () -> IO ()
-outTabS cols = S.mapM_ putStrLn . tabS cols
-
-main :: IO ()
-main = putStrLn "Hello, Haskell!"
+main:: IO ()
+main = sumAndTabulate 3 [1..10]
