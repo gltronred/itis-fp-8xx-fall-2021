@@ -3,7 +3,7 @@ module Main where
 import Streaming as S
 import qualified Streaming.Prelude as S
 
-import Control.Lens
+-- import Control.Lens
 
 -- Вывести на экран список list
 -- в cols столбцов (например,
@@ -57,10 +57,26 @@ outTabS cols = S.mapM_ putStrLn .
 
 --------------------------------------
 
--- data Lens s a = Lens
---   { getter :: s -> a
---   , setter :: s -> (a -> s)
---   }
+data Lens s a = Lens
+  { getter :: s -> a
+  , setter :: a -> s -> s
+  }
+
+ix :: Int -> Lens [a] a
+ix k = Lens (get k) (set k)
+  where get 0 (x:_xs) = x
+        get k (_x:xs) = get (k-1) xs
+        set 0 y (_:xs) = y : xs
+        set k y (x:xs) = x : set (k-1) y xs
+
+ex1 = getter (ix 4) [1..10]
+ex2 = setter (ix 4) 101 [1..10]
+
+
+
+
+
+
 -- type Lens s a = s -> (a, a -> s)
 -- type Lens f s a
 --   = (a -> f a) -> s -> f s
