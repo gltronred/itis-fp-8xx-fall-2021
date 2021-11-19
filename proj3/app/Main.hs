@@ -7,96 +7,24 @@ import Text.Megaparsec.Debug
 
 type Parser = Parsec Void String
 
--- scheme:[//[user:password@]host[:port]][/]path
+getValueParser :: String -> Parser String
+getValueParser separator = many ((char '\\' >> anySingle) <|> noneOf separator)
 
-data URL = URL
-  { scheme :: Scheme
-  , domain :: Maybe Domain
-  , path :: String
-  } deriving (Eq,Show)
+valueParser :: Parser String
+valueParser = getValueParser ",\n"
 
-data Domain = Domain
-  { credentials :: Maybe (String, String)
-  , host :: String
-  , port :: Maybe Int
-  } deriving (Eq,Show)
+quotedValueParser :: Parser String
+quotedValueParser = do
+    _ <- char '"'
+    res <- getValueParser "\""
+    _ <- char '"'
+    return res
 
-data Scheme
-  = SchemeHttp
-  | SchemeHttps
-  | SchemeData
-  deriving (Eq,Show)
+row :: Parser [String]
+row = sepBy (quotedValueParser <|> valueParser) (single ',')
 
--- http://example.com
--- data://asdasdasdads
--- https://user:pass@example.com:1234/asd
-
-schemeParser :: Parser Scheme
-schemeParser
-  =   SchemeHttps <$ string "https:"
-  <|> SchemeHttp  <$ string "http:"
-  <|> SchemeData  <$ string "data:"
-
-domainParser :: Parser Domain
-domainParser = do
-  _ <- string "//"
-  mcreds <- optional $ try $ do
-    user <- some alphaNumChar <?> "username"
-    _ <- single ':'
-    pass <- some alphaNumChar <?> "password"
-    _ <- single '@'
-    pure (user, pass)
-  host <- some (alphaNumChar <|> single '.') <?> "hostname"
-  -- mport <- optional $ do
-  --   _ <- single ':'
-  --   read <$> some digitChar
-  mport <- optional $
-    single ':' *>
-    fmap read (some digitChar <?> "port")
-  pure $ Domain mcreds host mport
-
-urlParser :: Parser URL
-urlParser = URL
-  <$> (schemeParser <?> "valid scheme")
-  <*> optional domainParser
-  <*  optional (single '/')
-  <*> takeRest
-
--- ((()))
--- ""
-bracketParser :: Parser String
-bracketParser
-  =   ((\c s d -> [c]++s++[d])
-       <$> char '('
-       <*> bracketParser
-       <*> char ')')
-  <|> string ""
-
--- <tag1>
---   <tag2></tag2>
--- </tag1>
--- <tag3></tag3>
-type XML = [TagTree]
-data TagTree = Tree String (Maybe XML)
-  deriving (Eq,Show)
--- [ Tree "tag1" (Just $ Tree "tag2" Nothing)
--- , Tree "tag3" Nothing]
-
-openParser :: Parser String
-openParser = char '<' *> some alphaNumChar <* char '>'
-
-closeParser :: String -> Parser String
-closeParser tag = string "</" *> string tag <* char '>'
-
-treeParser :: Parser TagTree
-treeParser = do
-  tag <- openParser
-  inner <- optional $ try xmlParser
-  closeParser tag
-  pure $ Tree tag inner
-
-xmlParser :: Parser XML
-xmlParser = many $ try treeParser
+csvParser :: Parser [[String]]
+csvParser = sepBy row (single '\n')
 
 csv :: String
 csv = "col1,col2,col3\nr2 c1,r2 c2,r2 c3\n\"r3,c1\",\"r3,c2\",\"r3,c3\"\n\"r4\\\",\\\"\\\\c1\",\"r4\\\",\\\"c2\",\"r4\\\",\\\"c3\""
@@ -110,4 +38,8 @@ csvRes =
   ]
 
 main :: IO ()
-main = pure ()
+main = do
+  case parse csvParser "" csv of
+    Left bundle -> putStr (errorBundlePretty bundle)
+    Right xs -> print xs
+  print csvRes 
