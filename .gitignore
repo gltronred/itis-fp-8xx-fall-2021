@@ -4,3 +4,4 @@ dist-newstyle
 stack.yaml
 stack.yaml.lock
 .DS_Store
+.vscode
