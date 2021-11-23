@@ -33,13 +33,15 @@ getObjectCount path = do
       )
     Right files -> return $ path ++ "\t" ++ show (length files)
 
-getDirectoriesByDepth :: FilePath -> Int -> StateT [FilePath] IO ()
+getDirectoriesByDepth :: FilePath -> Int -> StateT [FilePath] IO Bool
 getDirectoriesByDepth path 0 = do
   modify (path :)
+  return True
 getDirectoriesByDepth path depth = do
   modify (path :)
   dirs <- liftIO $ getDirectoriesInSpecifiedFolder path
   forM_ dirs (\dir -> getDirectoriesByDepth dir (depth - 1))
+  return True
 
 duHelper :: FilePath -> Int -> IO ()
 duHelper path depth = do
