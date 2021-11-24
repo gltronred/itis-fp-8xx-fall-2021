@@ -25,14 +25,14 @@ sumAndTabulate cols list = do
   putStrLn "\n"
   return $ sum list
 
-sumAndTabulateHelper cols (x:xs) current
+sumAndTabulateHelper cols (x : xs) current
   | null xs = putStr ("\t" ++ show x)
   | cols == current = do
-     putStrLn ("\t" ++ show x)
-     sumAndTabulateHelper cols xs 1
+    putStrLn ("\t" ++ show x)
+    sumAndTabulateHelper cols xs 1
   | otherwise = do
     putStr ("\t" ++ show x)
-    sumAndTabulateHelper cols xs (current+1)
+    sumAndTabulateHelper cols xs (current + 1)
 
 -- -- Свободная монада - на одном из следующих занятий
 -- data S f m r
