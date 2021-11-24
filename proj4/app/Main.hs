@@ -20,8 +20,19 @@ import qualified Streaming.Prelude as S
 -- >
 -- > 55
 sumAndTabulate :: Int -> [Int] -> IO Int
-sumAndTabulate cols list = error "Write me!"
+sumAndTabulate cols list = do
+  sumAndTabulateHelper cols list 1
+  putStrLn "\n"
+  return $ sum list
 
+sumAndTabulateHelper cols (x:xs) current
+  | null xs = putStr ("\t" ++ show x)
+  | cols == current = do
+     putStrLn ("\t" ++ show x)
+     sumAndTabulateHelper cols xs 1
+  | otherwise = do
+    putStr ("\t" ++ show x)
+    sumAndTabulateHelper cols xs (current+1)
 
 -- -- Свободная монада - на одном из следующих занятий
 -- data S f m r
