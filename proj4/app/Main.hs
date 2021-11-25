@@ -20,8 +20,15 @@ import TheLens ()
 -- >
 -- > 55
 sumAndTabulate :: Int -> [Int] -> IO Int
-sumAndTabulate cols list = error "Write me!"
-
+sumAndTabulate cols list = out cols cols list where
+  out _ _ [] = do {putStrLn "";putStrLn "";return 0}
+  out n cols (x:list) = do
+    if n == cols then putStrLn "" else putStr ""
+    putStr $ "\t" ++ show x
+    if n == 1 then do {s <- out cols cols list;return $ x + s} 
+    else do
+      s <- out (n - 1) cols list
+      return $ x + s
 
 -- -- Свободная монада - на одном из следующих занятий
 -- data S f m r
