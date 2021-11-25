@@ -102,12 +102,16 @@ moveCircle f dx dy = f
   & _Circle . _1 . x +~ dx
   & _Circle . _1 . y +~ dy
 
+-- сдвигаем отрезки на d
 moveSegments1 s d = s
   & traverse . beg . x +~ d
   & traverse . beg . y +~ d
   & traverse . end . x +~ d
   & traverse . end . y +~ d
 
+-- сдвигаем отрезки на d,
+-- используя линзы как первоклассные
+-- значения в языке
 moveSegments2 s d = foldr ($) s
   [ over (traverse . seg . coord) (+d)
   | seg <- [beg, end]
