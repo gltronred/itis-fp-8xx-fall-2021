@@ -82,7 +82,8 @@ r15 = p2 ^.. points . folded . x
 r16 = toListOf (folded . origin) figures
 r17 = figures ^.. folded . points . folded . x
 
--- traverse
+-- traverses
+
 r18 = figures & traverse . origin .~ pt 0 0
 r19 = figures & traverse . points . traverse . x +~ 100
 
