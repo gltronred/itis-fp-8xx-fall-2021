@@ -31,6 +31,8 @@ executable proj5
     -- other-extensions:
     build-depends:    base ^>=4.14.3.0
                     , aeson >=1.5
+                    , http-api-data >=0.4
+                    , http-client-tls >=0.3
                     , servant >=0.18
                     , servant-client >=0.18
                     , servant-server >=0.18
