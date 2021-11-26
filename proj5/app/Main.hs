@@ -136,4 +136,10 @@ run actions = do
     Right a -> pure $ Right a
 
 main :: IO ()
-main = putStrLn "Hello, Haskell!"
+main = do
+  r <- run $ do
+    x <- joke (EmptyAny (CommaSep [])) Nothing Nothing Nothing Nothing Nothing
+    y <- joke (EmptyAny (CommaSep [Programming])) Nothing Nothing Nothing Nothing Nothing
+    z <- joke (EmptyAny (CommaSep [])) (Just De) Nothing Nothing Nothing Nothing
+    pure [x,y,z]
+  print r
