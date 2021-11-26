@@ -12,11 +12,6 @@ data Point = Point
   , _y :: Double
   } deriving (Eq,Show)
 
-data Segment = Segment
-  { _beg :: Point
-  , _end :: Point
-  } deriving (Eq,Show)
-
 data Figure
   = Circle
     { _origin :: Point
@@ -30,8 +25,6 @@ data Figure
 
 makeLenses ''Point
 
-makeLenses ''Segment
-
 makeLenses ''Figure
 makePrisms ''Figure
 
@@ -44,12 +37,6 @@ figures =
   [ c1
   , p2
   , Polygon (pt 11 12) [pt 13 14, pt 15 16, pt 17 18]
-  ]
-
-segments =
-  [ Segment (pt 0 0) (pt 100 0)
-  , Segment (pt 100 0) (pt 100 100)
-  , Segment (pt 100 100) (pt 0 0)
   ]
 
 -- lenses
@@ -74,6 +61,12 @@ r10 = c1 ^? _Circle . _1 . x
 r11 = preview (_Circle . _1 . x) c1
 r12 = figures ^? ix 0
 r13 = figures ^? ix 9
+
+-- change works
+r20 = figures & ix 0 . _Circle . _1 . x .~ 5.0
+r21 = figures & ix 1 . _Circle . _1 . x .~ 5.0
+r22 = figures & ix 0 . radius .~ 5.0
+r23 = figures & ix 1 . radius .~ 5.0
 
 -- folds
 
@@ -100,8 +93,22 @@ expandCircle f k = f & radius *~ k
 
 -- сдвигаем круг на (dx,dy)
 moveCircle f dx dy = f
-  & _Circle . _1 . x +~ dx
-  & _Circle . _1 . y +~ dy
+  & g . x +~ dx
+  & g . y +~ dy
+  where g = _Circle . _1
+
+data Segment = Segment
+  { _beg :: Point
+  , _end :: Point
+  } deriving (Eq,Show)
+
+makeLenses ''Segment
+
+segments =
+  [ Segment (pt 0 0) (pt 100 0)
+  , Segment (pt 100 0) (pt 100 100)
+  , Segment (pt 100 100) (pt 0 0)
+  ]
 
 -- сдвигаем отрезки на d
 moveSegments1 s d = s
