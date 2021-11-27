@@ -3,6 +3,7 @@ module Main where
 import Data.Void
 import Text.Megaparsec
 import Text.Megaparsec.Char
+import Text.Megaparsec.Debug
 
 type Parser = Parsec Void String
 
@@ -61,5 +62,52 @@ urlParser = URL
   <*  optional (single '/')
   <*> takeRest
 
+-- ((()))
+-- ""
+bracketParser :: Parser String
+bracketParser
+  =   ((\c s d -> [c]++s++[d])
+       <$> char '('
+       <*> bracketParser
+       <*> char ')')
+  <|> string ""
+
+-- <tag1>
+--   <tag2></tag2>
+-- </tag1>
+-- <tag3></tag3>
+type XML = [TagTree]
+data TagTree = Tree String (Maybe XML)
+  deriving (Eq,Show)
+-- [ Tree "tag1" (Just $ Tree "tag2" Nothing)
+-- , Tree "tag3" Nothing]
+
+openParser :: Parser String
+openParser = char '<' *> some alphaNumChar <* char '>'
+
+closeParser :: String -> Parser String
+closeParser tag = string "</" *> string tag <* char '>'
+
+treeParser :: Parser TagTree
+treeParser = do
+  tag <- openParser
+  inner <- optional $ try xmlParser
+  closeParser tag
+  pure $ Tree tag inner
+
+xmlParser :: Parser XML
+xmlParser = many $ try treeParser
+
+csv :: String
+csv = "col1,col2,col3\nr2 c1,r2 c2,r2 c3\n\"r3,c1\",\"r3,c2\",\"r3,c3\"\n\"r4\\\",\\\"\\\\c1\",\"r4\\\",\\\"c2\",\"r4\\\",\\\"c3\""
+
+csvRes :: [[String]]
+csvRes =
+  [ [ "col1", "col2", "col3" ]
+  , [ "r2 c1", "r2 c2", "r2 c3" ]
+  , [ "r3,c1", "r3,c2", "r3,c3" ]
+  , [ "r4\",\"\\c1", "r4\",\"c2", "r4\",\"c3"]
+  ]
+
 main :: IO ()
-main = putStrLn "Hello, Haskell!"
+main = pure ()
