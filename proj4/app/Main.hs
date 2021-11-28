@@ -3,7 +3,7 @@ module Main where
 import Streaming as S
 import qualified Streaming.Prelude as S
 
--- import Control.Lens
+import TheLens ()
 
 -- Вывести на экран список list
 -- в cols столбцов (например,
