@@ -5,6 +5,8 @@
 
 module Main where
 
+import Control.Concurrent.STM
+import Control.Monad.IO.Class
 import Data.Aeson
 import Data.Char
 import Data.Proxy
@@ -12,6 +14,8 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import GHC.Generics
 import Network.HTTP.Client.TLS (newTlsManager)
+import Network.Wai.Handler.Warp
+import Servant
 import Servant.API
 import Servant.Client
 import Web.HttpApiData
@@ -174,8 +178,8 @@ getJoke :: Categories
      -> ClientM Joke
 getJoke = client api
 
-run :: ClientM a -> IO (Either String a)
-run actions = do
+runJokeApi :: ClientM a -> IO (Either String a)
+runJokeApi actions = do
   mgr <- newTlsManager
   let env = mkClientEnv mgr $
         BaseUrl Https "v2.jokeapi.dev" 443 ""
@@ -184,11 +188,56 @@ run actions = do
     Left err -> print err >> pure (Left $ show err)
     Right a -> pure $ Right a
 
+
+
+data Task = Task
+  { description :: Text
+  , finished :: Bool
+  } deriving (Generic,Eq,Show)
+instance FromJSON Task
+instance ToJSON Task where
+  toEncoding = genericToEncoding defaultOptions
+
+
+type TodoApi = "tasks" :> QueryParam "finished" Bool :> Get '[JSON] [Task]
+          :<|> "tasks" :> ReqBody '[JSON] Task :> Post '[JSON] Int
+          :<|> "tasks" :> Capture "taskId" Int :> Get '[JSON] Task
+          :<|> "tasks" :> Capture "taskId" Int :> DeleteNoContent
+
+server :: TVar [Task] -> Server TodoApi
+server store = getTasks store
+  :<|> postTask store
+  :<|> getTask store
+  :<|> finishTask store
+
+getTasks :: TVar [Task] -> Maybe Bool -> Handler [Task]
+getTasks store mfin = do
+  tasks <- liftIO $ atomically $ readTVar store
+  case mfin of
+    Nothing -> pure tasks
+    Just fin -> pure $ filter ((==fin) . finished) tasks
+
+postTask :: TVar [Task] -> Task -> Handler Int
+postTask store task = liftIO $ atomically $ do
+  modifyTVar' store (++[task])
+  pred . length <$> readTVar store
+
+getTask :: TVar [Task] -> Int -> Handler Task
+getTask store k = liftIO $ atomically $ (!!k) <$> readTVar store
+
+finishTask :: TVar [Task] -> Int -> Handler NoContent
+finishTask store k = liftIO $ atomically $ do
+  modifyTVar' store $ \tasks ->
+    take k tasks ++ [(tasks!!k) { finished = True }] ++ drop (k+1) tasks
+  pure NoContent
+
 main :: IO ()
 main = do
-  r <- run $ do
+  r <- runJokeApi $ do
     x <- getJoke (EmptyAny (CommaSep [])) Nothing Nothing Nothing Nothing Nothing
     y <- getJoke (EmptyAny (CommaSep [Programming])) Nothing Nothing Nothing Nothing Nothing
     z <- getJoke (EmptyAny (CommaSep [])) (Just De) Nothing Nothing Nothing Nothing
     pure [x,y,z]
   print r
+  store <- newTVarIO []
+  run 8081 $ serve (Proxy :: Proxy TodoApi) $ server store
