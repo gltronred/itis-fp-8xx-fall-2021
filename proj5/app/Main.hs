@@ -1,17 +1,21 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators #-}
 
 module Main where
 
 import Data.Aeson
+import Data.Char
 import Data.Proxy
 import Data.Text (Text)
 import qualified Data.Text as T
+import GHC.Generics
 import Network.HTTP.Client.TLS (newTlsManager)
 import Servant.API
 import Servant.Client
 import Web.HttpApiData
+import Data.Aeson.Types (unexpected)
 
 newtype CommaSep a = CommaSep [a]
   deriving (Eq,Show)
@@ -45,22 +49,27 @@ data Category
   | Pun
   | Spooky
   | Christmas
-  deriving (Eq,Show,Read,Bounded,Enum)
+  deriving (Generic,Eq,Show,Read,Bounded,Enum)
 
 instance FromHttpApiData Category where
   parseUrlPiece = parseBoundedTextData
 instance ToHttpApiData Category where
   toUrlPiece = T.pack . show
+instance FromJSON Category
+instance ToJSON Category where
+  toEncoding = genericToEncoding defaultOptions
 
 type Categories = EmptyAny Category
 
 data Lang = Cs | De | En | Es | Fr | Pt
-  deriving (Eq,Show,Read,Bounded,Enum)
+  deriving (Generic,Eq,Show,Read,Bounded,Enum)
 
 instance FromHttpApiData Lang where
   parseUrlPiece = parseBoundedTextData
 instance ToHttpApiData Lang where
   toUrlPiece = T.toLower . T.pack . show
+instance FromJSON Lang where
+  parseJSON = genericParseJSON $ defaultOptions { constructorTagModifier = map toLower }
 
 data Flag
   = Nsfw
@@ -103,6 +112,46 @@ instance ToHttpApiData Range where
   toQueryParam (Range f t) = T.concat
     [ T.pack $ show f, "-", T.pack $ show t]
 
+data JokeFlags = JokeFlags
+  { nsfw :: Bool
+  , religious :: Bool
+  , political :: Bool
+  , racist :: Bool
+  , sexist :: Bool
+  , explicit :: Bool
+  } deriving (Generic,Eq,Show)
+instance FromJSON JokeFlags
+
+data JokeContents
+  = JokeSingle { joke :: Text }
+  | JokeTwopart { setup :: Text, delivery :: Text }
+  deriving (Generic,Eq,Show)
+
+data Joke = Joke
+  { error :: Bool
+  , category :: Category
+  , contents :: JokeContents
+  , flags :: JokeFlags
+  , safe :: Bool
+  , id :: Int
+  , lang :: Lang
+  }
+  deriving (Generic,Eq,Show)
+instance FromJSON Joke where
+  parseJSON = withObject "Joke" $ \obj -> do
+    type_ <- obj .: "type"
+    contents <- case (type_ :: Text) of
+      "single" -> JokeSingle <$> obj .: "joke"
+      "twopart" -> JokeTwopart <$> obj .: "setup" <*> obj .: "delivery"
+      _ -> unexpected "Unexpected type"
+    err <- obj .: "error"
+    cat <- obj .: "category"
+    flags <- obj .: "flags"
+    safe <- obj .: "safe"
+    id <- obj .: "id"
+    lang <- obj .: "lang"
+    pure $ Joke err cat contents flags safe id lang
+
 type JokeApi
   = "joke"
   :> Capture "category" Categories
@@ -111,19 +160,19 @@ type JokeApi
   :> QueryParam "type" JokeType
   :> QueryParam "contains" Text
   :> QueryParam "idRange" Range
-  :> Get '[JSON] Value
+  :> Get '[JSON] Joke
 
 api :: Proxy JokeApi
 api = Proxy
 
-joke :: Categories
+getJoke :: Categories
      -> Maybe Lang
      -> Maybe Flags
      -> Maybe JokeType
      -> Maybe Text
      -> Maybe Range
-     -> ClientM Value
-joke = client api
+     -> ClientM Joke
+getJoke = client api
 
 run :: ClientM a -> IO (Either String a)
 run actions = do
@@ -138,8 +187,8 @@ run actions = do
 main :: IO ()
 main = do
   r <- run $ do
-    x <- joke (EmptyAny (CommaSep [])) Nothing Nothing Nothing Nothing Nothing
-    y <- joke (EmptyAny (CommaSep [Programming])) Nothing Nothing Nothing Nothing Nothing
-    z <- joke (EmptyAny (CommaSep [])) (Just De) Nothing Nothing Nothing Nothing
+    x <- getJoke (EmptyAny (CommaSep [])) Nothing Nothing Nothing Nothing Nothing
+    y <- getJoke (EmptyAny (CommaSep [Programming])) Nothing Nothing Nothing Nothing Nothing
+    z <- getJoke (EmptyAny (CommaSep [])) (Just De) Nothing Nothing Nothing Nothing
     pure [x,y,z]
   print r
