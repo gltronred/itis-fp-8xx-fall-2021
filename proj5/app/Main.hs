@@ -73,7 +73,8 @@ instance FromHttpApiData Lang where
 instance ToHttpApiData Lang where
   toUrlPiece = T.toLower . T.pack . show
 instance FromJSON Lang where
-  parseJSON = genericParseJSON $ defaultOptions { constructorTagModifier = map toLower }
+  parseJSON = genericParseJSON $
+    defaultOptions { constructorTagModifier = map toLower }
 
 data Flag
   = Nsfw
@@ -199,23 +200,25 @@ instance ToJSON Task where
   toEncoding = genericToEncoding defaultOptions
 
 
-type TodoApi = "tasks" :> QueryParam "finished" Bool :> Get '[JSON] [Task]
-          :<|> "tasks" :> ReqBody '[JSON] Task :> Post '[JSON] Int
-          :<|> "tasks" :> Capture "taskId" Int :> Get '[JSON] Task
-          :<|> "tasks" :> Capture "taskId" Int :> DeleteNoContent
+type TodoApi
+  =      "tasks" :> QueryParam "finished" Bool :> Get '[JSON] [(Int,Task)]
+    :<|> "tasks" :> ReqBody '[JSON] Task :> Post '[JSON] Int
+    :<|> "tasks" :> Capture "taskId" Int :> Get '[JSON] Task
+    :<|> "tasks" :> Capture "taskId" Int :> DeleteNoContent
 
 server :: TVar [Task] -> Server TodoApi
-server store = getTasks store
+server store
+  =    getTasks store
   :<|> postTask store
   :<|> getTask store
   :<|> finishTask store
 
-getTasks :: TVar [Task] -> Maybe Bool -> Handler [Task]
+getTasks :: TVar [Task] -> Maybe Bool -> Handler [(Int,Task)]
 getTasks store mfin = do
-  tasks <- liftIO $ atomically $ readTVar store
+  tasks <- liftIO $ atomically $ zip [0..] <$> readTVar store
   case mfin of
     Nothing -> pure tasks
-    Just fin -> pure $ filter ((==fin) . finished) tasks
+    Just fin -> pure $ filter ((==fin) . finished . snd) tasks
 
 postTask :: TVar [Task] -> Task -> Handler Int
 postTask store task = liftIO $ atomically $ do
@@ -239,5 +242,6 @@ main = do
     z <- getJoke (EmptyAny (CommaSep [])) (Just De) Nothing Nothing Nothing Nothing
     pure [x,y,z]
   print r
+  -- Serving API
   store <- newTVarIO []
   run 8081 $ serve (Proxy :: Proxy TodoApi) $ server store
