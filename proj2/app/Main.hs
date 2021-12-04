@@ -94,16 +94,15 @@ retryN n act = do
 
 count :: TQueue Int -> Async () -> Int -> IO Int
 count q r s = do
-  (finished, mx) <- atomically $ (,)
-    <$> pollSTM r
-    <*> tryReadTQueue q
+  mx <- atomically $ tryReadTQueue q
   case mx of
     Nothing -> do
-      -- finished <- poll r
+      finished <- poll r
       case finished of
         Nothing -> count q r s
         Just _ -> pure s
-    Just x -> count q r $! s+x
+    Just x -> count q r $! s + (if isPrime x then x else 0)
+
 
 writer :: TQueue Int -> IO ()
 writer q = do
