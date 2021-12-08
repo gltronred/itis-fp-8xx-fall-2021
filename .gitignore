@@ -1,1 +1,7 @@
 dist-newstyle
+.idea
+.stack-work
+stack.yaml
+stack.yaml.lock
+.DS_Store
+.vscode
