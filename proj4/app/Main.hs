@@ -19,9 +19,16 @@ import TheLens ()
 -- >    10
 -- >
 -- > 55
-sumAndTabulate :: Int -> [Int] -> IO Int
-sumAndTabulate cols list = error "Write me!"
+sumAndTabulate :: Int -> [Int] -> IO ()
+sumAndTabulate cols list = do
+  let (sum, lines) = helper cols list 1 0 ""
+  putStrLn lines
+  print sum
 
+helper cols [] curCol sum lines = (sum, lines)
+helper cols (x : xs) curCol sum lines
+  | curCol `mod` cols == 0 = helper cols xs (curCol + 1) (sum + x) (lines ++ show x ++ "\n") 
+  | otherwise = helper cols xs (curCol + 1) (sum + x) (lines ++ show x ++ "\t")
 
 -- -- Свободная монада - на одном из следующих занятий
 -- data S f m r
@@ -132,4 +139,4 @@ Right 123
 ------------------}
 
 main :: IO ()
-main = putStrLn "Hello, Haskell!"
+main = sumAndTabulate 4 [1 .. 15]
