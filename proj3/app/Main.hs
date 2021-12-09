@@ -109,5 +109,27 @@ csvRes =
   , [ "r4\",\"\\c1", "r4\",\"c2", "r4\",\"c3"]
   ]
 
+csvParser :: Parser [[String]]
+csvParser = sepEndBy lineParser (char '\n')
+
+-- Одна строка
+lineParser :: Parser [String]
+lineParser = sepBy1 cellParser (char ',')
+
+-- Значение внутри ячейки в кавычках или без
+cellParser :: Parser String
+cellParser = quotedCell <|> normalCell
+
+-- Экранированный символ
+escapedToken:: Parser (Token String)
+escapedToken = char '\\' >> anySingle
+
+normalCell :: Parser String
+normalCell = many (escapedToken <|> noneOf ",\n")
+
+quotedCell :: Parser String
+quotedCell = char '"' *> many (escapedToken <|> noneOf "\"") <* char '"'
+
 main :: IO ()
-main = pure ()
+main = do
+  parseTest csvParser csv
