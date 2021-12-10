@@ -119,7 +119,6 @@ groupByCountries days = do
     . S.map (\x -> map toCountry x)
     . S.mapped S.toList
     . S.groupBy (\a b -> a ^. code == b ^. code) 
-    . S.take 137603
     $ S.each days
   return $ S.fst' res
 
