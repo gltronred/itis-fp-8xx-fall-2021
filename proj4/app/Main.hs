@@ -1,135 +1,144 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module Main where
 
+import Data.List
+import Data.Maybe
+import Control.Monad.Trans.Resource.Internal
 import Streaming as S
 import qualified Streaming.Prelude as S
+import Control.Monad.Trans.Resource (runResourceT)
+import qualified Streaming.ByteString.Char8 as Q
+import qualified Data.Attoparsec.ByteString.Char8 as A
+import qualified Data.Attoparsec.ByteString.Streaming as AS
+import Control.Lens
+import Control.Lens.TH
 
-import TheLens ()
+data Country = Country
+  { _code :: String
+  , _continent :: String
+  , _population :: Int
+  } deriving (Eq,Show)
 
--- Вывести на экран список list
--- в cols столбцов (например,
--- после каждого числа вывести
--- знак табуляции) и вернуть
--- сумму элементов списка
---
--- > sumAndTabulate 3 [1..10]
--- >
--- >    1       2       3
--- >    4       5       6
--- >    7       8       9
--- >    10
--- >
--- > 55
-sumAndTabulate :: Int -> [Int] -> IO Int
-sumAndTabulate cols list = error "Write me!"
+data Covid = Covid
+  { _cases :: Double
+  , _deaths :: Double
+  , _vaccinations :: Double
+  } deriving (Eq,Show)
 
+data CovDay = CovDay
+  { _countryD :: Country   
+  , _covidD :: Covid
+  } deriving (Eq,Show)
 
--- -- Свободная монада - на одном из следующих занятий
--- data S f m r
---   = Elem (f (S f m r)) -- "чистый" элемент e и данные дальше
---   | Act (m (S f m r))  -- данные из действия (в монаде m)
---   | Res r              -- результат r
+data CovCountry = CovCountry
+  { _countryCou :: Country
+  , _covidCou :: Covid
+  } deriving (Eq,Show)
 
-stS :: Int
-    -> Stream (Of Int) IO Int
-    -> IO Int
-stS cols = fmap S.fst' .
-  S.sum .
-  S.mapM_ (liftIO . putStrLn) .
-  tabS 3 .
-  S.copy
+data CovContinent = CovContinent
+  { _name :: String
+  , _populationCont :: Int
+  , _covidCont :: Covid 
+  } deriving (Eq,Show)
 
--- Получение стрима из нужных строк
-tabS :: Monad m
-     => Int
-     -> Stream (Of Int) m r
-     -> Stream (Of String) m r
-tabS cols ints = S.mapsM S.mconcat $
-                 S.chunksOf cols $
-                 S.map addTab ints
-  where addTab x = show x ++ "\t"
+data CovGlobal = CovGlobal
+  { _populationG :: Int
+  , _covidG :: Covid
+  } deriving (Eq,Show)
 
--- Вывод на экран
-outTabS :: Int
-        -> Stream (Of Int) IO ()
-        -> IO ()
-outTabS cols = S.mapM_ putStrLn .
-               tabS cols
+makeLenses ''Covid
+makeLenses ''Country
+makeLenses ''CovDay
+makeLenses ''CovCountry
+makeLenses ''CovContinent
 
---------------------------------------
+csvParser :: A.Parser [[String]]
+csvParser = A.sepBy' rowPraser (A.char '\n')
 
-type Lens f s t a b
-  = (a -> f b) -- функция модификации поля
-  -> s         -- старый объект
-  -> f t       -- новый объект
-type Lens' f s a = Lens f s s a a
+rowPraser :: A.Parser [String]
+rowPraser = A.sepBy' (quotedValueParser <|> valueParser) (A.char ',')
 
-ix :: Functor f => Int -> Lens' f [a] a
-ix k = go k
-  where
-    go 0 f (x:xs) = (:xs) <$> f x
-    go k f (x:xs) = (x:) <$> go (k-1) f xs
+valueParser :: A.Parser String
+valueParser = A.many' $ (A.char '\\' >> A.anyChar) <|> A.satisfy (A.notInClass ",\n")
 
-_1 :: Functor f => Lens f (a,b) (c,b) a c
-_1 f (a,b) = (\x -> (x,b)) <$> f a
+quotedValueParser :: A.Parser String
+quotedValueParser = do
+    _ <- A.char '"'
+    result <- A.many' $ (A.char '\\' >> A.anyChar) <|> A.satisfy (A.notInClass "\"")
+    _ <- A.char '"'
+    return result
 
-_2 :: Functor f => Lens f (a,b) (a,d) b d
-_2 f (a,b) = (\x -> (a,x)) <$> f b
+parseCsv :: String -> IO [[String]]
+parseCsv path = do 
+  (res,_) <- runResourceT 
+    . AS.parse csvParser 
+    $ Q.readFile path
+  case res of
+    Right r -> return $ init r
+    Left _ -> return []
 
-ex1 = (ix 4) Identity [1..10]
-ex2 = (ix 4) (const $ Identity 101) [1..10]
-ex3 = (ix 4) (\x -> [101..104]) [1..10]
-ex4 = (ix 4) (\x -> (x,x)) [1..10]
-ex5 = _1 (const $ Identity 789) (123,456)
-ex6 = _1 (const $ Identity "ads") (123,456)
-ex7 = _2 (Identity . show) (123,456)
-ex8 = _2 (\x -> [show x, show $ x+1]) (123,456)
-ex9 = (_1 . _2) (const $ Identity "x") ((1,2),3)
+toCovDays :: [[String]] -> IO [CovDay]
+toCovDays (headers:csv) = do
+  let caseIndex = fromJust $ elemIndex "new_cases_smoothed" headers
+  let deathIndex = fromJust $ elemIndex "new_deaths_smoothed" headers
+  let vacIndex = fromJust $ elemIndex "new_vaccinations_smoothed" headers
+  let isoIndex = fromJust $ elemIndex "iso_code" headers
+  let contIndex = fromJust $ elemIndex "continent" headers
+  let popIndex = fromJust $ elemIndex "population" headers
+  return $ map (\row -> CovDay (Country (row !! isoIndex) (row !! contIndex) (round $ emptyOrRead $ row !! popIndex)) (Covid (emptyOrRead $ row !! caseIndex) (emptyOrRead $ row !! deathIndex) (emptyOrRead $ row !! vacIndex))) $ init csv
+    where emptyOrRead s = if s == "" then 0.0 else read s
 
+toCovCountries :: [CovDay] -> IO [CovCountry]
+toCovCountries [] = return []
+toCovCountries xs = do
+  let isos = nub $ xs ^.. folded . countryD . code
+  makeCountry xs isos
+    where 
+      
+      makeCountry :: [CovDay] -> [String] -> IO [CovCountry]
+      makeCountry xs [] = return []
+      makeCountry xs (iso:isos) = do
+        let xs' = xs ^.. folded . filtered (codeEquals iso)
+        if null xs' then return []
+        else do
+          let c = CovCountry (head xs' ^. countryD) (Covid (sum $ xs' ^.. folded . covidD . cases) (sum $ xs' ^.. folded . covidD . deaths) (sum $ xs' ^.. folded . covidD . vaccinations))
+          cs <- makeCountry xs isos
+          return $ c : cs
+        
+      codeEquals iso x = (x ^. countryD . code) == iso
 
+toCovContinents :: [CovCountry] -> IO [CovContinent]
+toCovContinents [] = return []
+toCovContinents xs = do
+  let names = nub $ xs ^.. folded . countryCou . continent
+  makeContinent xs names
+    where 
+      
+      makeContinent :: [CovCountry] -> [String] -> IO [CovContinent]
+      makeContinent xs [] = return []
+      makeContinent xs (name:names) = do
+        let xs' = xs ^.. folded . filtered (continentEquals name)
+        if null xs' then return []
+        else do
+          let c = CovContinent (head xs' ^. countryCou . continent) (sum $ xs' ^.. folded . countryCou . population) (Covid (sum $ xs' ^.. folded . covidCou . cases) (sum $ xs' ^.. folded . covidCou . deaths) (sum $ xs' ^.. folded . covidCou . vaccinations))
+          cs <- makeContinent xs names
+          return $ c : cs
+        
+      continentEquals name x = (x ^. countryCou . continent) == name
 
-
-{-------------------
-*Main> ((1,[3::Int,4,5]),(2,3))^._2._2
-3
-*Main> ((1,[3::Int,4,5]),(2,3)) & _2._2 .~ "asd"
-((1,[3,4,5]),(2,"asd"))
-*Main> ((1,[3::Int,4,5]),(2,3)) & _2._2 .~ (123,321)
-((1,[3,4,5]),(2,(123,321)))
-*Main> ((1,[3::Int,4,5]),(2,3)) ^. _2
-(2,3)
-*Main> ((1,[3::Int,4,5]),(2,3)) & _2 %~ (\(a,b) -> (a,b,123))
-((1,[3,4,5]),(2,3,123))
-*Main> ((1,[3::Int,4,5]),(2,3)) ^. _1 . _2
-[3,4,5]
-*Main> ((1,[3::Int,4,5]),(2,3)) ^? _1 . _2 . ix 5
-Nothing
-*Main> ((1,[3::Int,4,5]),(2,3)) ^? _1 . _2 . ix 1
-Just 4
-*Main> ((1,[3::Int,4,5]),(2,3)) ^.. _1 . _2 . ix 1
-[4]
-*Main> Right 123 :: Either String Int
-Right 123
-*Main> let ea = Right 123 :: Either String Int
-*Main> ea ^? _Left
-Nothing
-*Main> ea ^? _Right
-Just 123
-*Main> ea & _Right .~ 124
-Right 124
-*Main> ea & _Left .~ 124
-Right 123
-*Main> ea & _Left .~ "123"
-Right 123
-*Main> ea & _Left %~ ("f" ++)
-Right 123
-*Main> let eb = Left "asdasd"
-*Main> eb & _Left %~ ("f" ++)
-Left "fasdasd"
-*Main> ea & _Left %~ ("f" ++)
-Right 123
-*Main> ea & _Left %~ ("f" ++)
-Right 123
-------------------}
+toCovGlobal :: [CovContinent] -> IO CovGlobal
+toCovGlobal [] = return $ CovGlobal 0 (Covid 0 0 0)
+toCovGlobal xs = do
+  let g = CovGlobal (sum $ xs ^.. folded . populationCont) (Covid (sum $ xs ^.. folded . covidCont . cases) (sum $ xs ^.. folded . covidCont . deaths) (sum $ xs ^.. folded . covidCont . vaccinations))
+  return g
 
 main :: IO ()
-main = putStrLn "Hello, Haskell!"
+main = do
+  csv <- parseCsv ".\\app\\data\\owid-covid-data.csv"
+  days <- toCovDays csv
+  countries <- toCovCountries days
+  continents <- toCovContinents countries
+  print continents
+  global <-toCovGlobal continents
+  print global
