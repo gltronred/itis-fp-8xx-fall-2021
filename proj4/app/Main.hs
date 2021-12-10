@@ -1,135 +1,102 @@
+
+{-# LANGUAGE TemplateHaskell #-}
+
 module Main where
 
-import Streaming as S
-import qualified Streaming.Prelude as S
+import Data.List
+import Control.Lens
+import Streaming
+import Control.Monad.Trans.Resource
+import qualified Streaming.Prelude as Streaming
+import qualified Streaming.ByteString.Char8 as SChar8
+import qualified Data.Attoparsec.ByteString.Char8 as AChar8
+import qualified Data.Attoparsec.ByteString.Streaming as AStreaming
 
-import TheLens ()
+data Day = Day { _dayCode :: String, _dayContinent :: String, _dayCases :: Double, _dayDeaths :: Double, _dayVaccinations :: Double, _dayPopulation :: String}
+  deriving (Eq,Show)
 
--- Вывести на экран список list
--- в cols столбцов (например,
--- после каждого числа вывести
--- знак табуляции) и вернуть
--- сумму элементов списка
---
--- > sumAndTabulate 3 [1..10]
--- >
--- >    1       2       3
--- >    4       5       6
--- >    7       8       9
--- >    10
--- >
--- > 55
-sumAndTabulate :: Int -> [Int] -> IO Int
-sumAndTabulate cols list = error "Write me!"
+data Grouped = Grouped { _groupedName :: String, _groupedContinent :: String, _groupedTotalCases :: Double, _groupedTotalDeaths :: Double, _groupedTotalVaccinations :: Double, _groupedPopulation :: Double}
+  deriving (Eq,Show)
 
+makeLenses ''Day
+makeLenses ''Grouped
 
--- -- Свободная монада - на одном из следующих занятий
--- data S f m r
---   = Elem (f (S f m r)) -- "чистый" элемент e и данные дальше
---   | Act (m (S f m r))  -- данные из действия (в монаде m)
---   | Res r              -- результат r
+main = do
+  indexes <- getIndexes
+  days <- getParsedCsv indexes
+  countries <- getGroupedCountries days
+  world <- Streaming.fold foldContinent (Grouped "" "" 0.0 0.0 0.0 0.0) id
+                                        $ Streaming.each countries
+  putStrLn "For Continents"
+  Streaming.print
+    . Streaming.mapped (Streaming.fold foldContinent (Grouped "" "" 0.0 0.0 0.0 0.0) id)
+    . Streaming.groupBy (\x y -> x ^. groupedContinent == y ^. groupedContinent)
+    $ Streaming.each (sortBy (\x y -> compare (x ^. groupedContinent) (y ^. groupedContinent)) countries)
+  putStrLn "For World"
+  putStrLn (show ((Streaming.fst' world) & groupedContinent .~ ""))
 
-stS :: Int
-    -> Stream (Of Int) IO Int
-    -> IO Int
-stS cols = fmap S.fst' .
-  S.sum .
-  S.mapM_ (liftIO . putStrLn) .
-  tabS 3 .
-  S.copy
+getIndexes = do
+  (r, _) <- runResourceT . AStreaming.parse (AChar8.sepBy' getFieldParser (AChar8.char ','))
+      $ SChar8.readFile "./owid-covid-data.csv"
+  case r of
+    Right xs -> return (foldr (\x -> if elem x columns
+                                     then (++) (helperInt x xs)
+                                     else (++) []) [] xs)
+    Left _ -> return []
 
--- Получение стрима из нужных строк
-tabS :: Monad m
-     => Int
-     -> Stream (Of Int) m r
-     -> Stream (Of String) m r
-tabS cols ints = S.mapsM S.mconcat $
-                 S.chunksOf cols $
-                 S.map addTab ints
-  where addTab x = show x ++ "\t"
+columns = [ "iso_code", "continent", "new_cases_smoothed", "new_deaths_smoothed", "new_vaccinations_smoothed", "population"]
+helperInt x list = case elemIndex x list of
+  Just n -> [n]
+  Nothing -> []
 
--- Вывод на экран
-outTabS :: Int
-        -> Stream (Of Int) IO ()
-        -> IO ()
-outTabS cols = S.mapM_ putStrLn .
-               tabS cols
+getParsedCsv x = do
+  (r, _) <- runResourceT . AStreaming.parse (getCsvParser x)
+     $ SChar8.readFile "./owid-covid-data.csv"
+  case r of
+    Right x -> return (init x)
+    Left _ -> return []
 
---------------------------------------
+getFieldParser = AChar8.many' $ (AChar8.satisfy $ AChar8.inClass "a-zA-Z0-9") <|> (AChar8.satisfy $ AChar8.inClass "-_. '()")
 
-type Lens f s t a b
-  = (a -> f b) -- функция модификации поля
-  -> s         -- старый объект
-  -> f t       -- новый объект
-type Lens' f s a = Lens f s s a a
+getParsedRow x = do
+  row <- AChar8.sepBy' getFieldParser (AChar8.char ',')
+  return $ [ row !! i | i <- x]
 
-ix :: Functor f => Int -> Lens' f [a] a
-ix k = go k
-  where
-    go 0 f (x:xs) = (:xs) <$> f x
-    go k f (x:xs) = (x:) <$> go (k-1) f xs
+getCsvParser x = do
+  _ <- AChar8.sepBy' getFieldParser (AChar8.char ',') *> (AChar8.char '\n')
+  r <- AChar8.sepBy' (getParsedRow x) (AChar8.char '\n')
+  return $ map (\x -> Day (x !! 0) (x !! 1) (toDouble (x !! 2)) (toDouble (x !! 3)) (toDouble (x !! 4)) (x !! 5)) r
 
-_1 :: Functor f => Lens f (a,b) (c,b) a c
-_1 f (a,b) = (\x -> (x,b)) <$> f a
+toDouble arg = if arg == ""
+               then 0.0
+               else (read arg :: Double)
 
-_2 :: Functor f => Lens f (a,b) (a,d) b d
-_2 f (a,b) = (\x -> (a,x)) <$> f b
+getGroupedCountries days = do
+  r <- Streaming.toList
+    . Streaming.map (\x -> foldr foldCountry (Grouped "" "" 0.0 0.0 0.0 0.0) x)
+    . Streaming.map (\x -> map getCountry x)
+    . Streaming.mapped Streaming.toList
+    . Streaming.groupBy (\x y -> x ^. dayCode == y ^. dayCode)
+    $ Streaming.each days
+  return (Streaming.fst' r)
 
-ex1 = (ix 4) Identity [1..10]
-ex2 = (ix 4) (const $ Identity 101) [1..10]
-ex3 = (ix 4) (\x -> [101..104]) [1..10]
-ex4 = (ix 4) (\x -> (x,x)) [1..10]
-ex5 = _1 (const $ Identity 789) (123,456)
-ex6 = _1 (const $ Identity "ads") (123,456)
-ex7 = _2 (Identity . show) (123,456)
-ex8 = _2 (\x -> [show x, show $ x+1]) (123,456)
-ex9 = (_1 . _2) (const $ Identity "x") ((1,2),3)
+getCountry x = Grouped (x ^. dayCode)
+                      (x ^. dayContinent)
+                      (x ^. dayCases)
+                      (x ^. dayDeaths)
+                      (x ^. dayVaccinations)
+                      (toDouble (x ^. dayPopulation))
 
+foldCountry x1 x2 = x1 & groupedTotalCases .~ (x1 ^. groupedTotalCases + x2 ^. groupedTotalCases)
+  & groupedTotalDeaths .~ (x1 ^. groupedTotalDeaths + x2 ^. groupedTotalDeaths)
+  & groupedTotalVaccinations .~ (x1 ^. groupedTotalVaccinations + x2 ^. groupedTotalVaccinations)
 
-
-
-{-------------------
-*Main> ((1,[3::Int,4,5]),(2,3))^._2._2
-3
-*Main> ((1,[3::Int,4,5]),(2,3)) & _2._2 .~ "asd"
-((1,[3,4,5]),(2,"asd"))
-*Main> ((1,[3::Int,4,5]),(2,3)) & _2._2 .~ (123,321)
-((1,[3,4,5]),(2,(123,321)))
-*Main> ((1,[3::Int,4,5]),(2,3)) ^. _2
-(2,3)
-*Main> ((1,[3::Int,4,5]),(2,3)) & _2 %~ (\(a,b) -> (a,b,123))
-((1,[3,4,5]),(2,3,123))
-*Main> ((1,[3::Int,4,5]),(2,3)) ^. _1 . _2
-[3,4,5]
-*Main> ((1,[3::Int,4,5]),(2,3)) ^? _1 . _2 . ix 5
-Nothing
-*Main> ((1,[3::Int,4,5]),(2,3)) ^? _1 . _2 . ix 1
-Just 4
-*Main> ((1,[3::Int,4,5]),(2,3)) ^.. _1 . _2 . ix 1
-[4]
-*Main> Right 123 :: Either String Int
-Right 123
-*Main> let ea = Right 123 :: Either String Int
-*Main> ea ^? _Left
-Nothing
-*Main> ea ^? _Right
-Just 123
-*Main> ea & _Right .~ 124
-Right 124
-*Main> ea & _Left .~ 124
-Right 123
-*Main> ea & _Left .~ "123"
-Right 123
-*Main> ea & _Left %~ ("f" ++)
-Right 123
-*Main> let eb = Left "asdasd"
-*Main> eb & _Left %~ ("f" ++)
-Left "fasdasd"
-*Main> ea & _Left %~ ("f" ++)
-Right 123
-*Main> ea & _Left %~ ("f" ++)
-Right 123
-------------------}
-
-main :: IO ()
-main = putStrLn "Hello, Haskell!"
+foldContinent x1 x2 = x1 & groupedName
+  .~ (if (x1 ^. groupedName) == ""
+      then (x2 ^. groupedName)
+      else (x1 ^. groupedName) ++ "," ++ (x2 ^. groupedName))
+  & groupedTotalCases .~ (x1 ^. groupedTotalCases + x2 ^. groupedTotalCases)
+  & groupedTotalDeaths .~ (x1 ^. groupedTotalDeaths + x2 ^. groupedTotalDeaths)
+  & groupedTotalVaccinations .~ ( x1 ^. groupedTotalVaccinations + x2 ^. groupedTotalVaccinations)
+  & groupedPopulation .~ (x1 ^. groupedPopulation + x2 ^. groupedPopulation)
+  & groupedContinent .~ (x2 ^. groupedContinent)

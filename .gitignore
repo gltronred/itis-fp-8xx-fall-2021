@@ -1,1 +1,4 @@
 dist-newstyle
+.DS_Store
+.idea/itis-fp-8xx-fall-2021.iml
+*.xml
