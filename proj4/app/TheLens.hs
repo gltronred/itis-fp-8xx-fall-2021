@@ -7,6 +7,13 @@ module TheLens where
 import Control.Lens
 import Control.Lens.TH
 
+-- import qualified Data.ByteString.Streaming.Char8 as Q
+import Streaming
+import qualified Streaming.Prelude as S
+import qualified Data.ByteString.Streaming.Char8 as Q
+import qualified Data.Attoparsec.ByteString.Char8 as A
+import qualified Data.Attoparsec.ByteString.Streaming as AS
+
 data Point = Point
   { _x :: Double
   , _y :: Double
@@ -125,3 +132,16 @@ moveSegments2 s d = foldr ($) s
   | seg <- [beg, end]
   , coord <- [x, y]
   ]
+
+o :: IO ()
+o = Q.getContents           -- raw bytes
+-- o = Q.readFile "./app/owid-covid-data.csv"           -- raw bytes
+  & AS.parsed lineParser  -- stream of parsed `Maybe Int`s; blank lines are `Nothing`
+  & void                  -- drop any unparsed nonsense at the end
+  & S.split Nothing       -- split on blank lines
+  & S.maps S.concat       -- keep `Just x` values in the sub-streams (cp. catMaybes)
+  & S.mapped S.sum        -- sum each substream
+  & S.print               -- stream results to stdout
+
+lineParser = Just <$> A.scientific <* A.endOfLine <|> Nothing <$ A.endOfLine
+
