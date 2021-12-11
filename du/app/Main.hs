@@ -4,10 +4,10 @@ module Main where
 
     import System.Directory (listDirectory, doesDirectoryExist, getFileSize)
     import Control.Monad
-    import Control.Monad.Trans (liftIO)
-    import Control.Monad.State (runStateT, MonadState, StateT, modify, get)
-    import Control.Monad.Writer (MonadIO, Writer, WriterT, tell, execWriterT)
     import Control.Monad.Except (runExcept, runExceptT, Except, ExceptT, MonadError, throwError)
+    import Control.Monad.Writer (MonadIO, Writer, WriterT, tell, execWriterT)
+    import Control.Monad.State (runStateT, MonadState, StateT, modify, get)
+    import Control.Monad.Trans (liftIO)
 
     onError :: (MonadError String m, MonadIO m)
             => Bool -> String -> m ()
