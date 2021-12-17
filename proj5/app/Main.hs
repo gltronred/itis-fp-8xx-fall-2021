@@ -5,6 +5,15 @@
 
 module Main where
 
+
+import System.Locale as L
+import Data.Time.Format as F
+import Data.List.Split
+import Data.Time.ISO8601
+import Data.Time
+import Data.Time.Format
+import Data.Time.Clock
+import Text.Printf
 import Control.Concurrent.STM
 import Control.Monad.IO.Class
 import Data.Aeson
@@ -21,227 +30,287 @@ import Servant.Client
 import Web.HttpApiData
 import Data.Aeson.Types (unexpected)
 
-newtype CommaSep a = CommaSep [a]
-  deriving (Eq,Show)
+data Root = Root
+  { rBooks :: String,
+    rCharacters :: String,
+    rHouses :: String
+  } deriving (Show, Generic)
 
-instance FromHttpApiData a => FromHttpApiData (CommaSep a) where
-  parseUrlPiece t = fmap CommaSep $
-                    mapM parseUrlPiece $
-                    T.splitOn "," t
-  parseQueryParam = fmap CommaSep .
-                    mapM parseUrlPiece .
-                    T.splitOn ","
-instance ToHttpApiData a => ToHttpApiData (CommaSep a) where
-  toUrlPiece (CommaSep ts) = T.intercalate "," $ map toUrlPiece ts
-  toQueryParam (CommaSep ts) = T.intercalate "," $ map toQueryParam ts
+instance FromJSON Root where
+  parseJSON = withObject "Root" $ \obj -> do
+    books_ <- obj .: "books"
+    characters_ <- obj .: "characters"
+    houses_ <- obj .: "houses"
+    pure $ Root books_ characters_ houses_
 
-newtype EmptyAny a = EmptyAny (CommaSep a)
-  deriving (Eq,Show)
+data Book = Book
+  { url :: String,
+    name :: String,
+    isbn :: String,
+    authors :: [String],
+    numberOfPages :: Int,
+    publisher :: String,
+    country :: String,
+    mediaType :: String,
+    released :: UTCTime,
+    characters :: [String],
+    povCharacters :: [String]
+  } deriving (Show, Generic)
 
-instance FromHttpApiData a => FromHttpApiData (EmptyAny a) where
-  parseUrlPiece t = case t of
-    "Any" -> pure $ EmptyAny (CommaSep [])
-    _ -> EmptyAny <$> parseUrlPiece t
-instance ToHttpApiData a => ToHttpApiData (EmptyAny a) where
-  toUrlPiece (EmptyAny (CommaSep [])) = "Any"
-  toUrlPiece (EmptyAny t) = toUrlPiece t
+instance FromJSON Book where
+    parseJSON = withObject "Book" $ \obj -> do
+      type_ <- obj .: "url"
+      name_ <- obj .: "name"
+      isbn_ <- obj .: "isbn"
+      authors_ <- obj .: "authors"
+      numberOfPages_ <- obj .: "numberOfPages"
+      publisher_ <- obj .: "publisher"
+      country_ <- obj .: "country"
+      mediaType_ <- obj .: "mediaType"
+      released_ <- obj .: "released"
+      characters_ <- obj .: "characters"
+      povCharacters_ <- obj .: "povCharacters"
+      pure $ Book type_ name_ isbn_ authors_
+          numberOfPages_ publisher_ country_ mediaType_
+          (isoStringToUTC released_) characters_ povCharacters_
 
-data Category
-  = Programming
-  | Misc
-  | Dark
-  | Pun
-  | Spooky
-  | Christmas
-  deriving (Generic,Eq,Show,Read,Bounded,Enum)
+data Gender = Male | Female deriving (Show, Generic)
 
-instance FromHttpApiData Category where
-  parseUrlPiece = parseBoundedTextData
-instance ToHttpApiData Category where
-  toUrlPiece = T.pack . show
-instance FromJSON Category
-instance ToJSON Category where
-  toEncoding = genericToEncoding defaultOptions
+data Character = Character
+  { cUrl :: String,
+    cName :: String,
+    cGender :: Gender,
+    cCulture :: String,
+    cBorn :: String,
+    cDied :: String,
+    cTitles :: [String],
+    cAliases :: [String],
+    cFather :: String,
+    cMother :: String,
+    cSpouse :: String,
+    cAllegiances :: [String],
+    cBooks :: [String],
+    cPovBook :: [String],
+    cTvSeries :: [String],
+    cPlayedBy :: [String]
+  } deriving (Show, Generic)
 
-type Categories = EmptyAny Category
+instance FromJSON Character where
+  parseJSON = withObject "Character" $ \obj -> do
+    url_ <- obj .: "url"
+    name_ <- obj .: "name"
+    gender_ <- obj .: "gender"
+    culture_ <- obj .: "culture"
+    born_ <- obj .: "born"
+    died_ <- obj .: "died"
+    titles_ <- obj .: "titles"
+    aliases_ <- obj .: "aliases"
+    father_ <- obj .: "father"
+    mother_ <- obj .: "mother"
+    spouse_ <- obj .: "spouse"
+    allegiances_ <- obj .: "allegiances"
+    books_ <- obj .: "books"
+    povBooks_ <- obj .: "povBooks"
+    tvSeries_ <- obj .: "tvSeries"
+    playedBy_ <- obj .: "playedBy"
 
-data Lang = Cs | De | En | Es | Fr | Pt
-  deriving (Generic,Eq,Show,Read,Bounded,Enum)
+    case (gender_ :: Text) of
+      "Female" -> pure $ Character url_ name_ Female culture_ born_ died_ titles_
+                    aliases_ father_ mother_ spouse_ allegiances_ books_
+                    povBooks_ tvSeries_ playedBy_
 
-instance FromHttpApiData Lang where
-  parseUrlPiece = parseBoundedTextData
-instance ToHttpApiData Lang where
-  toUrlPiece = T.toLower . T.pack . show
-instance FromJSON Lang where
-  parseJSON = genericParseJSON $
-    defaultOptions { constructorTagModifier = map toLower }
+      "Male" -> pure $ Character url_ name_ Male culture_ born_ died_ titles_
+                    aliases_ father_ mother_ spouse_ allegiances_ books_
+                    povBooks_ tvSeries_ playedBy_
 
-data Flag
-  = Nsfw
-  | Religious
-  | Political
-  | Racist
-  | Sexist
-  | Explicit
-  deriving (Eq,Show,Read,Bounded,Enum)
+data House = House
+  { hUrl :: String,
+    hName :: String,
+    hRegion :: String,
+    rCoatOfArms :: String,
+    rWords :: String,
+    rTitles :: [String],
+    rSeats :: [String],
+    rCurrentLord :: String,
+    rHeir :: String,
+    rOverLord :: String,
+    rFounded :: String,
+    rFounder :: String,
+    rDiedOut :: String,
+    rAncestralWeapons :: [String],
+    rCadetBranches :: [String],
+    rSwornMembers :: [String]
+  } deriving (Show, Generic)
 
-instance FromHttpApiData Flag where
-  parseUrlPiece = parseBoundedTextData
-instance ToHttpApiData Flag where
-  toUrlPiece = T.toLower . T.pack . show
+instance FromJSON House where
+  parseJSON = withObject "House" $ \obj -> do
+    url_ <- obj .: "url"
+    name_ <- obj .: "name"
+    region_ <- obj .: "region"
+    coatOfArms_ <- obj .: "coatOfArms"
+    words_ <- obj .: "words"
+    titles_ <- obj .: "titles"
+    seats_ <- obj .: "seats"
+    currentLord_ <- obj .: "currentLord"
+    heir_ <- obj .: "heir"
+    overlord_ <- obj .: "overlord"
+    founded_ <- obj .: "founded"
+    founder_ <- obj .: "founder"
+    diedOut_ <- obj .: "diedOut"
+    ancestralWeapons_ <- obj .: "ancestralWeapons"
+    cadetBranches_ <- obj .: "cadetBranches"
+    swornMembers_ <- obj .: "swornMembers"
+    pure $ House url_ name_ region_ coatOfArms_ words_ titles_
+              seats_ currentLord_ heir_ overlord_ founded_ founder_
+              diedOut_ ancestralWeapons_ cadetBranches_ swornMembers_
 
-type Flags = CommaSep Flag
+root :: ClientM Root
+book :: Int -> ClientM Book
+books :: Maybe String ->  Maybe String ->  Maybe String ->
+  Maybe Int -> Maybe Int -> ClientM [Book]
+character :: Int -> ClientM Character
+fcharacters :: Maybe String -> Maybe String -> Maybe String ->
+  Maybe String -> Maybe String -> Maybe Bool -> Maybe Int -> Maybe Int ->
+  ClientM [Character]
+fhouse :: Int -> ClientM House
+fhouses :: Maybe String -> Maybe String -> Maybe String ->
+  Maybe Bool -> Maybe Bool -> Maybe Bool -> Maybe Bool -> Maybe Bool ->
+  Maybe Int -> Maybe Int -> ClientM [House]
 
-data JokeType = Single | Twopart
-  deriving (Eq,Show,Read,Bounded,Enum)
+type API = "api" :> Get '[JSON] Root
+      :<|> "api/books" :> Capture "x" Int  :> Get '[JSON] Book
+      :<|> "api/books" :>
+        QueryParam "name" String :>
+        QueryParam "fromReleaseDate" String :>
+        QueryParam "toReleaseDate" String :>
+        QueryParam "page" Int :>
+        QueryParam "pageSize" Int :>
+        Get '[JSON] [Book]
+      :<|> "api/characters" :> Capture "x" Int  :> Get '[JSON] Character
+      :<|> "api/characters" :>
+        QueryParam "name" String :>
+        QueryParam "gender" String :>
+        QueryParam "culture" String :>
+        QueryParam "born" String :>
+        QueryParam "died" String :>
+        QueryParam "isAlive" Bool :>
+        QueryParam "page" Int :>
+        QueryParam "pageSize" Int :>
+        Get '[JSON] [Character]
+      :<|> "api/houses" :> Capture "x" Int  :> Get '[JSON] House
+      :<|> "api/houses" :>
+          QueryParam "name" String :>
+          QueryParam "region" String :>
+          QueryParam "words" String :>
+          QueryParam "hasWords" Bool :>
+          QueryParam "hasTitles" Bool :>
+          QueryParam "hasSeats" Bool :>
+          QueryParam "hasDiedOut" Bool :>
+          QueryParam "hasAncestralWeapons" Bool :>
+          QueryParam "page" Int :>
+          QueryParam "pageSize" Int :>
+          Get '[JSON] [House]
 
-instance FromHttpApiData JokeType where
-  parseUrlPiece = parseBoundedTextData
-instance ToHttpApiData JokeType where
-  toUrlPiece = T.toLower . T.pack . show
-
-data Range = Range
-  { from :: Int
-  , to :: Int
-  }
-  deriving (Eq,Show)
-
-instance FromHttpApiData Range where
-  parseQueryParam t = do
-    let ts = T.splitOn "-" t
-    ints <- mapM parseQueryParam ts
-    case ints of
-      [f,t] -> pure $ Range f t
-      _ -> Left "Wrong number of components in range"
-instance ToHttpApiData Range where
-  toQueryParam (Range f t) = T.concat
-    [ T.pack $ show f, "-", T.pack $ show t]
-
-data JokeFlags = JokeFlags
-  { nsfw :: Bool
-  , religious :: Bool
-  , political :: Bool
-  , racist :: Bool
-  , sexist :: Bool
-  , explicit :: Bool
-  } deriving (Generic,Eq,Show)
-instance FromJSON JokeFlags
-
-data JokeContents
-  = JokeSingle { joke :: Text }
-  | JokeTwopart { setup :: Text, delivery :: Text }
-  deriving (Generic,Eq,Show)
-
-data Joke = Joke
-  { error :: Bool
-  , category :: Category
-  , contents :: JokeContents
-  , flags :: JokeFlags
-  , safe :: Bool
-  , id :: Int
-  , lang :: Lang
-  }
-  deriving (Generic,Eq,Show)
-instance FromJSON Joke where
-  parseJSON = withObject "Joke" $ \obj -> do
-    type_ <- obj .: "type"
-    contents <- case (type_ :: Text) of
-      "single" -> JokeSingle <$> obj .: "joke"
-      "twopart" -> JokeTwopart <$> obj .: "setup" <*> obj .: "delivery"
-      _ -> unexpected "Unexpected type"
-    err <- obj .: "error"
-    cat <- obj .: "category"
-    flags <- obj .: "flags"
-    safe <- obj .: "safe"
-    id <- obj .: "id"
-    lang <- obj .: "lang"
-    pure $ Joke err cat contents flags safe id lang
-
-type JokeApi
-  = "joke"
-  :> Capture "category" Categories
-  :> QueryParam "lang" Lang
-  :> QueryParam "blacklistFlags" Flags
-  :> QueryParam "type" JokeType
-  :> QueryParam "contains" Text
-  :> QueryParam "idRange" Range
-  :> Get '[JSON] Joke
-
-api :: Proxy JokeApi
+api :: Proxy API
 api = Proxy
 
-getJoke :: Categories
-     -> Maybe Lang
-     -> Maybe Flags
-     -> Maybe JokeType
-     -> Maybe Text
-     -> Maybe Range
-     -> ClientM Joke
-getJoke = client api
+root :<|> book :<|> books :<|> character :<|>
+  fcharacters :<|> fhouse :<|> fhouses = client api
 
-runJokeApi :: ClientM a -> IO (Either String a)
-runJokeApi actions = do
+getBook :: Int -> ClientM (Book)
+getBook num= do
+  b <- book num
+  return (b)
+
+getBooks :: Maybe String -> Maybe String -> Maybe String -> Maybe Int -> Maybe Int -> ClientM [Book]
+getBooks a b c d e = do
+  b <- books a (stringToISO b) (stringToISO c) d e
+  return (b)
+
+getRoot :: ClientM (Root)
+getRoot = do
+  r <- root
+  return (r)
+
+getCharacter :: Int -> ClientM Character
+getCharacter = do
+  c <- character
+  return c
+
+getCharacters :: Maybe String -> Maybe Gender -> Maybe String ->
+                  Maybe String -> Maybe String -> Maybe Bool ->
+                  Maybe Int -> Maybe Int -> ClientM [Character]
+getCharacters n (Just g) c b d a p ps = do
+  c <- fcharacters n (Just $ show g) c b d a p ps
+  return c
+getCharacters n Nothing c b d a p ps = do
+  c <- fcharacters n Nothing c b d a p ps
+  return c
+
+getHouse :: Int -> ClientM House
+getHouse = do
+  h <- fhouse
+  return h
+
+getHouses :: Maybe String -> Maybe String -> Maybe String -> Maybe Bool ->
+  Maybe Bool -> Maybe Bool -> Maybe Bool -> Maybe Bool ->
+  Maybe Int -> Maybe Int -> ClientM [House]
+getHouses = do
+  h <- fhouses
+  return h
+
+stringToUTC :: String -> UTCTime
+stringToUTC date = (read (date ++ " UTC")) :: UTCTime
+
+isoStringToUTC :: String -> UTCTime
+isoStringToUTC str = case (parseISO8601 (str ++ "Z")) of
+                        Nothing -> error "Not correct date"
+                        Just a -> a
+
+pop :: [a] -> [a]
+pop [] = []
+pop xs = init xs
+
+stringToISO :: Maybe String -> Maybe String
+stringToISO (Just a) = Just $ pop $ formatISO8601 $ stringToUTC a
+stringToISO Nothing = Nothing
+
+runApi :: ClientM a -> IO (Either String a)
+runApi actions = do
   mgr <- newTlsManager
   let env = mkClientEnv mgr $
-        BaseUrl Https "v2.jokeapi.dev" 443 ""
+        BaseUrl Https "anapioficeandfire.com" 443 ""
   res <- runClientM actions env
   case res of
     Left err -> print err >> pure (Left $ show err)
     Right a -> pure $ Right a
 
-
-
-data Task = Task
-  { description :: Text
-  , finished :: Bool
-  } deriving (Generic,Eq,Show)
-instance FromJSON Task
-instance ToJSON Task where
-  toEncoding = genericToEncoding defaultOptions
-
-
-type TodoApi
-  =      "tasks" :> QueryParam "finished" Bool :> Get '[JSON] [(Int,Task)]
-    :<|> "tasks" :> ReqBody '[JSON] Task :> Post '[JSON] Int
-    :<|> "tasks" :> Capture "taskId" Int :> Get '[JSON] Task
-    :<|> "tasks" :> Capture "taskId" Int :> DeleteNoContent
-
-server :: TVar [Task] -> Server TodoApi
-server store
-  =    getTasks store
-  :<|> postTask store
-  :<|> getTask store
-  :<|> finishTask store
-
-getTasks :: TVar [Task] -> Maybe Bool -> Handler [(Int,Task)]
-getTasks store mfin = do
-  tasks <- liftIO $ atomically $ zip [0..] <$> readTVar store
-  case mfin of
-    Nothing -> pure tasks
-    Just fin -> pure $ filter ((==fin) . finished . snd) tasks
-
-postTask :: TVar [Task] -> Task -> Handler Int
-postTask store task = liftIO $ atomically $ do
-  modifyTVar' store (++[task])
-  pred . length <$> readTVar store
-
-getTask :: TVar [Task] -> Int -> Handler Task
-getTask store k = liftIO $ atomically $ (!!k) <$> readTVar store
-
-finishTask :: TVar [Task] -> Int -> Handler NoContent
-finishTask store k = liftIO $ atomically $ do
-  modifyTVar' store $ \tasks ->
-    take k tasks ++ [(tasks!!k) { finished = True }] ++ drop (k+1) tasks
-  pure NoContent
-
 main :: IO ()
 main = do
-  r <- runJokeApi $ do
-    x <- getJoke (EmptyAny (CommaSep [])) Nothing Nothing Nothing Nothing Nothing
-    y <- getJoke (EmptyAny (CommaSep [Programming])) Nothing Nothing Nothing Nothing Nothing
-    z <- getJoke (EmptyAny (CommaSep [])) (Just De) Nothing Nothing Nothing Nothing
-    pure [x,y,z]
-  print r
-  -- Serving API
-  store <- newTVarIO []
-  run 8081 $ serve (Proxy :: Proxy TodoApi) $ server store
+  rH <- runApi $ do
+    x <- getHouses Nothing Nothing Nothing (Just True) (Just True) ( Just True) Nothing Nothing (Just 1) (Just 1)
+    y <- getHouse 1
+    pure (x, y)
+  print rH
+  putStrLn "\n"
+
+  rB <- runApi $ do
+    b1 <- getBooks Nothing Nothing Nothing (Just 1) (Just 1)
+    b2 <- getBook 12
+    pure (b1, b2)
+  print rB
+  putStrLn "\n"
+
+  rC <- runApi $ do
+    c1 <- getCharacters (Just "Walder") (Just Male) Nothing Nothing Nothing Nothing (Just 1) (Just 1)
+    c2 <- getCharacter 1
+    pure (c1, c2)
+  print rC
+  putStrLn "\n"
+
+  rR <- runApi $ do
+    rRoot <- getRoot
+    pure rRoot
+  print rR
+  putStrLn "\n"
+
