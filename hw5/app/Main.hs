@@ -35,7 +35,7 @@ data CovidRecordByGroup = CovidRecordByGroup {
   _vaccinationsSmoothed :: Double,
   _name :: String,
   _placePopulation :: Integer
-}
+} deriving (Eq, Show)
 makeLenses ''CovidRecordByGroup
 
 
@@ -68,17 +68,33 @@ readRecords path = do
 orElse replacement (Just x) = x
 orElse replacement (Nothing) = replacement
 
+
+eqByField field = (==) `on` (^. field)
+
+
 sumGroups path = do 
   records <- readRecords path
-  return $ (S.print . S.each $ records) 
+  byCountry <- S.toList . S.map (foldl sumByCountry covidGroupZero) . S.mapped S.toList . S.groupBy (eqByField isoCode) . S.each $ records
+  byContinent <- S.toList . S.map (foldl sumByContinent covidGroupZero) . S.mapped S.toList . S.groupBy (eqByField continent) . S.each $ records
+  return $ (byCountry, byContinent)
 
 sumAndCastMaybe ma mb = (+) <$> ma <*> mb & orElse 0
 
 sumFields field = sumAndCastMaybe `on` (^. field)
 
-sumByPlace r r' = CovidRecordByGroup cases deaths vaccinations name' population' where 
-  cases = sumFields newCasesSmoothed r r'
-  deaths = sumFields newDeathsSmoothed r r'
-  vaccinations = sumFields newVaccinationsSmoothed r r'
+
+sumByCountry rbg r = CovidRecordByGroup cases deaths vaccinations name' population' where 
+  cases = rbg ^. casesSmoothed + (r ^. newCasesSmoothed & orElse 0)
+  deaths = rbg ^. deathsSmoothed + (r ^. newDeathsSmoothed & orElse 0)
+  vaccinations = rbg ^. vaccinationsSmoothed + (r ^. newVaccinationsSmoothed & orElse 0)
   name' = r ^. isoCode
   population' = r ^. population
+
+sumByContinent rbg r = CovidRecordByGroup cases deaths vaccinations name' population' where 
+  cases = rbg ^. casesSmoothed + (r ^. newCasesSmoothed & orElse 0)
+  deaths = rbg ^. deathsSmoothed + (r ^. newDeathsSmoothed & orElse 0)
+  vaccinations = rbg ^. vaccinationsSmoothed + (r ^. newVaccinationsSmoothed & orElse 0)
+  name' = r ^. continent
+  population' = r ^. population
+
+covidGroupZero = CovidRecordByGroup 0 0 0 "" 0
