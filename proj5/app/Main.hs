@@ -1,5 +1,4 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -8,6 +7,7 @@ module Main where
 import Control.Concurrent.STM
 import Control.Monad.IO.Class
 import Data.Aeson
+import Data.Aeson.Types
 import Data.Char
 import Data.Proxy
 import Data.Text (Text)
@@ -19,229 +19,187 @@ import Servant
 import Servant.API
 import Servant.Client
 import Web.HttpApiData
-import Data.Aeson.Types (unexpected)
 
-newtype CommaSep a = CommaSep [a]
-  deriving (Eq,Show)
-
-instance FromHttpApiData a => FromHttpApiData (CommaSep a) where
-  parseUrlPiece t = fmap CommaSep $
-                    mapM parseUrlPiece $
-                    T.splitOn "," t
-  parseQueryParam = fmap CommaSep .
-                    mapM parseUrlPiece .
-                    T.splitOn ","
-instance ToHttpApiData a => ToHttpApiData (CommaSep a) where
-  toUrlPiece (CommaSep ts) = T.intercalate "," $ map toUrlPiece ts
-  toQueryParam (CommaSep ts) = T.intercalate "," $ map toQueryParam ts
-
-newtype EmptyAny a = EmptyAny (CommaSep a)
-  deriving (Eq,Show)
-
-instance FromHttpApiData a => FromHttpApiData (EmptyAny a) where
-  parseUrlPiece t = case t of
-    "Any" -> pure $ EmptyAny (CommaSep [])
-    _ -> EmptyAny <$> parseUrlPiece t
-instance ToHttpApiData a => ToHttpApiData (EmptyAny a) where
-  toUrlPiece (EmptyAny (CommaSep [])) = "Any"
-  toUrlPiece (EmptyAny t) = toUrlPiece t
-
-data Category
-  = Programming
-  | Misc
-  | Dark
-  | Pun
-  | Spooky
-  | Christmas
-  deriving (Generic,Eq,Show,Read,Bounded,Enum)
-
-instance FromHttpApiData Category where
-  parseUrlPiece = parseBoundedTextData
-instance ToHttpApiData Category where
-  toUrlPiece = T.pack . show
-instance FromJSON Category
-instance ToJSON Category where
-  toEncoding = genericToEncoding defaultOptions
-
-type Categories = EmptyAny Category
-
-data Lang = Cs | De | En | Es | Fr | Pt
-  deriving (Generic,Eq,Show,Read,Bounded,Enum)
-
-instance FromHttpApiData Lang where
-  parseUrlPiece = parseBoundedTextData
-instance ToHttpApiData Lang where
-  toUrlPiece = T.toLower . T.pack . show
-instance FromJSON Lang where
-  parseJSON = genericParseJSON $
-    defaultOptions { constructorTagModifier = map toLower }
-
-data Flag
-  = Nsfw
-  | Religious
-  | Political
-  | Racist
-  | Sexist
-  | Explicit
-  deriving (Eq,Show,Read,Bounded,Enum)
-
-instance FromHttpApiData Flag where
-  parseUrlPiece = parseBoundedTextData
-instance ToHttpApiData Flag where
-  toUrlPiece = T.toLower . T.pack . show
-
-type Flags = CommaSep Flag
-
-data JokeType = Single | Twopart
-  deriving (Eq,Show,Read,Bounded,Enum)
-
-instance FromHttpApiData JokeType where
-  parseUrlPiece = parseBoundedTextData
-instance ToHttpApiData JokeType where
-  toUrlPiece = T.toLower . T.pack . show
-
-data Range = Range
-  { from :: Int
-  , to :: Int
+data Book = Book
+  { bookUrl :: String,
+    bookName :: String,
+    isbn :: String,
+    authors :: [String],
+    numberOfPages :: Integer,
+    publisher :: String,
+    country :: String,
+    mediaType :: String,
+    released :: String,
+    characters :: [String],
+    povCharacters :: [String]
   }
-  deriving (Eq,Show)
+  deriving (Show)
 
-instance FromHttpApiData Range where
-  parseQueryParam t = do
-    let ts = T.splitOn "-" t
-    ints <- mapM parseQueryParam ts
-    case ints of
-      [f,t] -> pure $ Range f t
-      _ -> Left "Wrong number of components in range"
-instance ToHttpApiData Range where
-  toQueryParam (Range f t) = T.concat
-    [ T.pack $ show f, "-", T.pack $ show t]
+instance FromJSON Book where
+  parseJSON (Object v) =
+    Book
+      <$> v .: "url"
+      <*> v .: "name"
+      <*> v .: "isbn"
+      <*> v .: "authors"
+      <*> v .: "numberOfPages"
+      <*> v .: "publisher"
+      <*> v .: "country"
+      <*> v .: "mediaType"
+      <*> v .: "released"
+      <*> v .: "characters"
+      <*> v .: "povCharacters"
+  parseJSON invalid = typeMismatch "Book" invalid
 
-data JokeFlags = JokeFlags
-  { nsfw :: Bool
-  , religious :: Bool
-  , political :: Bool
-  , racist :: Bool
-  , sexist :: Bool
-  , explicit :: Bool
-  } deriving (Generic,Eq,Show)
-instance FromJSON JokeFlags
-
-data JokeContents
-  = JokeSingle { joke :: Text }
-  | JokeTwopart { setup :: Text, delivery :: Text }
-  deriving (Generic,Eq,Show)
-
-data Joke = Joke
-  { error :: Bool
-  , category :: Category
-  , contents :: JokeContents
-  , flags :: JokeFlags
-  , safe :: Bool
-  , id :: Int
-  , lang :: Lang
+data Character = Character
+  { characterUrl :: String,
+    characterName :: String,
+    gender :: String,
+    culture :: String,
+    born :: String,
+    died :: String,
+    characterTitles :: [String],
+    aliases :: [String],
+    father :: String,
+    mother :: String,
+    spouse :: String,
+    allegiances :: [String],
+    books :: [String],
+    povBooks :: [String],
+    tvSeries :: [String],
+    playedBy :: [String]
   }
-  deriving (Generic,Eq,Show)
-instance FromJSON Joke where
-  parseJSON = withObject "Joke" $ \obj -> do
-    type_ <- obj .: "type"
-    contents <- case (type_ :: Text) of
-      "single" -> JokeSingle <$> obj .: "joke"
-      "twopart" -> JokeTwopart <$> obj .: "setup" <*> obj .: "delivery"
-      _ -> unexpected "Unexpected type"
-    err <- obj .: "error"
-    cat <- obj .: "category"
-    flags <- obj .: "flags"
-    safe <- obj .: "safe"
-    id <- obj .: "id"
-    lang <- obj .: "lang"
-    pure $ Joke err cat contents flags safe id lang
+  deriving (Show)
 
-type JokeApi
-  = "joke"
-  :> Capture "category" Categories
-  :> QueryParam "lang" Lang
-  :> QueryParam "blacklistFlags" Flags
-  :> QueryParam "type" JokeType
-  :> QueryParam "contains" Text
-  :> QueryParam "idRange" Range
-  :> Get '[JSON] Joke
+instance FromJSON Character where
+  parseJSON (Object v) =
+    Character
+      <$> v .: "url"
+      <*> v .: "name"
+      <*> v .: "gender"
+      <*> v .: "culture"
+      <*> v .: "born"
+      <*> v .: "died"
+      <*> v .: "titles"
+      <*> v .: "aliases"
+      <*> v .: "father"
+      <*> v .: "mother"
+      <*> v .: "spouse"
+      <*> v .: "allegiances"
+      <*> v .: "books"
+      <*> v .: "povBooks"
+      <*> v .: "tvSeries"
+      <*> v .: "playedBy"
+  parseJSON invalid = typeMismatch "Character" invalid
 
-api :: Proxy JokeApi
+data House = House
+  { houseUrl :: String,
+    houseName :: String,
+    region :: String,
+    coatOfArms :: String,
+    words :: String,
+    houseTitles :: [String],
+    seats :: [String],
+    currentLord :: String,
+    heir :: String,
+    overlord :: String,
+    founded :: String,
+    founder :: String,
+    diedOut :: String,
+    ancestralWeapons :: [String],
+    cadetBranches :: [String],
+    swornMembers :: [String]
+  }
+  deriving (Show)
+
+instance FromJSON House where
+  parseJSON (Object v) =
+    House
+      <$> v .: "url"
+      <*> v .: "name"
+      <*> v .: "region"
+      <*> v .: "coatOfArms"
+      <*> v .: "words"
+      <*> v .: "titles"
+      <*> v .: "seats"
+      <*> v .: "currentLord"
+      <*> v .: "heir"
+      <*> v .: "overlord"
+      <*> v .: "founded"
+      <*> v .: "founder"
+      <*> v .: "diedOut"
+      <*> v .: "ancestralWeapons"
+      <*> v .: "cadetBranches"
+      <*> v .: "swornMembers"
+  parseJSON invalid = typeMismatch "House" invalid
+
+type Api =
+  "books"
+    :> Capture "id" Int
+    :> Get '[JSON] Book
+    :<|> "characters"
+    :> Capture "id" Int
+    :> Get '[JSON] Character
+    :<|> "houses"
+    :> Capture "id" Int
+    :> Get '[JSON] House
+    :<|> "houses"
+    :> Get '[JSON] [House]
+
+api :: Proxy Api
 api = Proxy
 
-getJoke :: Categories
-     -> Maybe Lang
-     -> Maybe Flags
-     -> Maybe JokeType
-     -> Maybe Text
-     -> Maybe Range
-     -> ClientM Joke
-getJoke = client api
+getCharacter :: Int -> ClientM Character
+getBook :: Int -> ClientM Book
+getHouse :: Int -> ClientM House
+getAllHouses :: ClientM [House]
+getBook :<|> getCharacter :<|> getHouse :<|> getAllHouses = client api
 
-runJokeApi :: ClientM a -> IO (Either String a)
-runJokeApi actions = do
-  mgr <- newTlsManager
-  let env = mkClientEnv mgr $
-        BaseUrl Https "v2.jokeapi.dev" 443 ""
+runApi :: ClientM a -> IO (Either String a)
+runApi actions = do
+  manager <- newTlsManager
+  let env =
+        mkClientEnv manager $
+          BaseUrl Https "www.anapioficeandfire.com" 443 "/api"
   res <- runClientM actions env
   case res of
     Left err -> print err >> pure (Left $ show err)
     Right a -> pure $ Right a
 
+getFirstCharacterIdOrStandart :: Either String Book -> Int
+getFirstCharacterIdOrStandart e = case e of
+  Left _ -> 583
+  Right b -> read (T.unpack $ last (T.splitOn (T.pack "/") (T.pack (firstCharacterFromBook b))))
+  where
+    firstCharacterFromBook book = head $ characters book
 
-
-data Task = Task
-  { description :: Text
-  , finished :: Bool
-  } deriving (Generic,Eq,Show)
-instance FromJSON Task
-instance ToJSON Task where
-  toEncoding = genericToEncoding defaultOptions
-
-
-type TodoApi
-  =      "tasks" :> QueryParam "finished" Bool :> Get '[JSON] [(Int,Task)]
-    :<|> "tasks" :> ReqBody '[JSON] Task :> Post '[JSON] Int
-    :<|> "tasks" :> Capture "taskId" Int :> Get '[JSON] Task
-    :<|> "tasks" :> Capture "taskId" Int :> DeleteNoContent
-
-server :: TVar [Task] -> Server TodoApi
-server store
-  =    getTasks store
-  :<|> postTask store
-  :<|> getTask store
-  :<|> finishTask store
-
-getTasks :: TVar [Task] -> Maybe Bool -> Handler [(Int,Task)]
-getTasks store mfin = do
-  tasks <- liftIO $ atomically $ zip [0..] <$> readTVar store
-  case mfin of
-    Nothing -> pure tasks
-    Just fin -> pure $ filter ((==fin) . finished . snd) tasks
-
-postTask :: TVar [Task] -> Task -> Handler Int
-postTask store task = liftIO $ atomically $ do
-  modifyTVar' store (++[task])
-  pred . length <$> readTVar store
-
-getTask :: TVar [Task] -> Int -> Handler Task
-getTask store k = liftIO $ atomically $ (!!k) <$> readTVar store
-
-finishTask :: TVar [Task] -> Int -> Handler NoContent
-finishTask store k = liftIO $ atomically $ do
-  modifyTVar' store $ \tasks ->
-    take k tasks ++ [(tasks!!k) { finished = True }] ++ drop (k+1) tasks
-  pure NoContent
+findHouseWithLord :: String -> [House] -> Maybe House
+findHouseWithLord lordLink houses
+  | null housesWithLord = Nothing
+  | otherwise = Just $ head housesWithLord
+  where
+    housesWithLord = filter (\house -> currentLord house == lordLink) houses
 
 main :: IO ()
 main = do
-  r <- runJokeApi $ do
-    x <- getJoke (EmptyAny (CommaSep [])) Nothing Nothing Nothing Nothing Nothing
-    y <- getJoke (EmptyAny (CommaSep [Programming])) Nothing Nothing Nothing Nothing Nothing
-    z <- getJoke (EmptyAny (CommaSep [])) (Just De) Nothing Nothing Nothing Nothing
-    pure [x,y,z]
-  print r
-  -- Serving API
-  store <- newTVarIO []
-  run 8081 $ serve (Proxy :: Proxy TodoApi) $ server store
+  bookEither <- runApi $ do
+    getBook 1
+  putStrLn $ case bookEither of
+    Left err -> err
+    Right book -> "Book name - " ++ bookName book
+  characterEither <- runApi $ do
+    getCharacter $ getFirstCharacterIdOrStandart bookEither
+  putStrLn $ case characterEither of
+    Left err -> err
+    Right character -> "First character this book - " ++ characterName character
+  housesEither <- runApi $ do
+    getAllHouses
+  putStrLn $ case housesEither of
+    Left err -> err
+    Right hos -> case findHouseWithLord
+      ( "https://anapioficeandfire.com/api/characters/"
+          ++ show (getFirstCharacterIdOrStandart bookEither)
+      )
+      hos of
+      Nothing -> "This character is not lord of any house"
+      Just ho -> "This character is lord of " ++ houseName ho ++ " house"
