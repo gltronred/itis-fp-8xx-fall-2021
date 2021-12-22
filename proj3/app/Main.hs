@@ -98,6 +98,17 @@ treeParser = do
 xmlParser :: Parser XML
 xmlParser = many $ try treeParser
 
+value = many ((char '\\' >> anySingle) <|> noneOf ",\n")
+
+quoted = do
+    _ <- char '"'
+    res <- many ((char '\\' >> anySingle) <|> noneOf "\"")
+    _ <- char '"'
+    return res
+
+csvParser :: Parser [[String]]
+csvParser = sepBy (sepBy (quoted <|> value) (single ',')) (single '\n')
+
 csv :: String
 csv = "col1,col2,col3\nr2 c1,r2 c2,r2 c3\n\"r3,c1\",\"r3,c2\",\"r3,c3\"\n\"r4\\\",\\\"\\\\c1\",\"r4\\\",\\\"c2\",\"r4\\\",\\\"c3\""
 
@@ -110,4 +121,8 @@ csvRes =
   ]
 
 main :: IO ()
-main = pure ()
+main = do
+  case parse csvParser "" csv of
+    Left bundle -> putStr (errorBundlePretty bundle)
+    Right xs -> print xs
+  print csvRes
